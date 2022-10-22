@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart
 
    This file is part of GnuCOBOL.
@@ -35,7 +35,7 @@
 
 /* Force symbol exports */
 #define	COB_LIB_EXPIMP
-#include "libcob.h"
+#include "common.h"
 #include "coblocal.h"
 
 /* Local variables */
@@ -106,6 +106,13 @@ pretty_display_numeric (cob_field *f, FILE *fp)
 	if (size > COB_MEDIUM_MAX) {
 		fputs (_("(Not representable)"), fp);
 		return;
+	}
+	if (scale < 0) {
+		digits -= scale;
+		size = digits + !!COB_FIELD_HAVE_SIGN (f);
+	} else if (digits < scale) {
+		digits = scale;
+		size = digits + !!COB_FIELD_HAVE_SIGN (f) + 1;
 	}
 	temp.size = size;
 	temp.data = q;

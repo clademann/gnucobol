@@ -1,4 +1,4 @@
-## Copyright (C) 2003-2012, 2014-2021 Free Software Foundation, Inc.
+## Copyright (C) 2003-2012, 2014-2022 Free Software Foundation, Inc.
 ## Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart,
 ## Ron Norman
 ##
@@ -311,8 +311,7 @@ AT_DATA([callee2.cob], [
        LINKAGE          SECTION.
        01 LNK-X         PIC XXX.
        PROCEDURE        DIVISION USING LNK-X.
-           DISPLAY LNK-X NO ADVANCING
-           END-DISPLAY.
+           DISPLAY LNK-X NO ADVANCING.
            EXIT PROGRAM.
 ])
 
@@ -324,11 +323,9 @@ AT_DATA([callee.cob], [
        01 LCL-X.
           05 FILLER     PIC XXX VALUE "abc".
        PROCEDURE        DIVISION.
-           CALL "callee2" USING LCL-X
-           END-CALL.
+           CALL "callee2" USING LCL-X.
            MOVE ZERO TO LCL-X.
-           CALL "callee2" USING LCL-X
-           END-CALL.
+           CALL "callee2" USING LCL-X.
            EXIT PROGRAM.
 ])
 
@@ -336,8 +333,7 @@ AT_DATA([caller.cob], [
        IDENTIFICATION   DIVISION.
        PROGRAM-ID.      caller.
        PROCEDURE        DIVISION.
-           CALL "callee"
-           END-CALL.
+           CALL "callee".
            STOP RUN.
 ])
 
@@ -533,9 +529,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            MOVE X TO X.
            IF X NOT = 12
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -559,9 +553,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            MOVE "1" TO X(1:1).
            IF X NOT = 1000
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -585,9 +577,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            MOVE X(1:I) TO Y.
            IF Y NOT = "1   "
-              DISPLAY Y NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY Y.
            STOP RUN.
 ])
 
@@ -610,9 +600,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            MOVE "99" TO G(3:2).
            IF G NOT = "1299"
-              DISPLAY G NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY G.
            STOP RUN.
 ])
 
@@ -636,9 +624,7 @@ AT_DATA([prog.cob], [
            SET I TO ZERO.
            MOVE I TO X(1).
            IF X(1) NOT = "0"
-              DISPLAY X(1) NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X(1).
            STOP RUN.
 ])
 
@@ -1668,6 +1654,39 @@ AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
 AT_CLEANUP
 
 
+AT_SETUP([TRANSFORM statement])
+AT_KEYWORDS([runmisc CONVERTING ALPHABET])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SPECIAL-NAMES.
+           ALPHABET MY-ASCII  IS STANDARD-1.
+           ALPHABET MY-EBCDIC IS EBCDIC.
+
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 X             PIC X(3) VALUE "BCA".
+       PROCEDURE        DIVISION.
+      *> internally: "alias" to INSPECT CONVERTING
+           TRANSFORM X FROM "ABC" TO "BCD".
+           IF X NOT = "CDB"
+              DISPLAY "X: " X.
+      *> optional CHARACTERS and ALPHABETs (value test is separate)
+           TRANSFORM X CHARACTERS FROM MY-ASCII TO MY-EBCDIC.
+      *>
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CLEANUP
+
+
 AT_SETUP([INSPECT CONVERTING alphabet])
 AT_KEYWORDS([runmisc ASCII EBCDIC])
 
@@ -1715,9 +1734,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            INSPECT X CONVERTING "ABC" TO SPACES.
            IF X NOT = SPACES
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -1739,9 +1756,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            INSPECT X CONVERTING NULL TO "A".
            IF X NOT = "AAA"
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -1761,11 +1776,9 @@ AT_DATA([prog.cob], [
        WORKING-STORAGE  SECTION.
        01 X             PIC X(3) VALUE "AAA".
        PROCEDURE        DIVISION.
-           INSPECT X CONVERTING "A" TO NULL.
+           INSPECT X CONVERTING "A" TO NULL
            IF X NOT = LOW-VALUES
-              DISPLAY "NG" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY "NG".
            STOP RUN.
 ])
 
@@ -1775,7 +1788,7 @@ AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
 AT_CLEANUP
 
 
-AT_SETUP([INSPECT REPLACING figurative constant])
+AT_SETUP([INSPECT CONVERTING complex])
 AT_KEYWORDS([runmisc])
 
 AT_DATA([prog.cob], [
@@ -1783,19 +1796,165 @@ AT_DATA([prog.cob], [
        PROGRAM-ID.      prog.
        DATA             DIVISION.
        WORKING-STORAGE  SECTION.
-       01 X             PIC X(3) VALUE "BCA".
+       01 X             PIC X(12) VALUE "AZABBCDCCECC".
        PROCEDURE        DIVISION.
-           INSPECT X REPLACING ALL "BC" BY SPACE.
-           IF X NOT = "  A"
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+           INSPECT X CONVERTING "ABZC" TO "ZY0X"
+           IF X NOT = "Z0ZYYXDXXEXX"
+              DISPLAY "1 - " X
+              MOVE "Z0ZYYXDXXEXX" TO X.
+
+           INSPECT X CONVERTING "XD" TO SPACES
+              BEFORE  "E" AFTER "D"
+           IF X NOT = "Z0ZYYXD  EXX"
+              DISPLAY "2 - " X
+              MOVE "Z0ZYYXD  EXX" TO X.
+
            STOP RUN.
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
 AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+AT_CLEANUP
 
+
+AT_SETUP([INSPECT numeric signed])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 SEPARATE1     PIC S99 VALUE -11 SIGN LEADING  SEPARATE.
+       01 SEPARATE2     PIC S99 VALUE +11 SIGN LEADING  SEPARATE.
+       01 TSEPARATE1    PIC S99 VALUE -11 SIGN TRAILING SEPARATE.
+       01 TSEPARATE2    PIC S99 VALUE +11 SIGN TRAILING SEPARATE.
+       01 NSEPARATE1    PIC S99 VALUE -11.
+       01 NSEPARATE2    PIC S99 VALUE +11.
+       01 TRAILING1     PIC S99 VALUE -11 SIGN TRAILING.
+       01 TRAILING2     PIC S99 VALUE +11 SIGN TRAILING.
+       77 CNT           USAGE BINARY-INT.
+       PROCEDURE        DIVISION.
+           MOVE 0 TO CNT
+           INSPECT SEPARATE1  TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T1 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT SEPARATE2  TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T2 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT TSEPARATE1 TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T3 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT TSEPARATE2 TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T4 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT NSEPARATE1 TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T5 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT NSEPARATE2 TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T6 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT TRAILING1  TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T7 - " CNT.
+           MOVE 0 TO CNT
+           INSPECT TRAILING2  TALLYING CNT FOR ALL "1"
+           IF CNT NOT = 2
+              DISPLAY "T8 - " CNT.
+
+           INSPECT SEPARATE1  CONVERTING "123" TO "234"
+           IF SEPARATE1 NOT = -22
+              DISPLAY "C1 - " SEPARATE1
+              MOVE -22 TO SEPARATE1.
+           INSPECT SEPARATE2  CONVERTING "123" TO "234"
+           IF SEPARATE2 NOT = +22
+              DISPLAY "C2 - " SEPARATE2
+              MOVE +22 TO SEPARATE2.
+           INSPECT TSEPARATE1 CONVERTING "123" TO "234"
+           IF TSEPARATE1 NOT = -22
+              DISPLAY "C3 - " TSEPARATE1
+              MOVE -22 TO TSEPARATE1.
+           INSPECT TSEPARATE2 CONVERTING "123" TO "234"
+           IF TSEPARATE2 NOT = +22
+              DISPLAY "C4 - " TSEPARATE2
+              MOVE +22 TO TSEPARATE2.
+           INSPECT NSEPARATE1 CONVERTING "123" TO "234"
+           IF NSEPARATE1 NOT = -22
+              DISPLAY "C5 - " NSEPARATE1
+              MOVE -22 TO NSEPARATE1.
+           INSPECT NSEPARATE2 CONVERTING "123" TO "234"
+           IF NSEPARATE2 NOT = +22
+              DISPLAY "C6 - " NSEPARATE2
+              MOVE +22 TO NSEPARATE2.
+           INSPECT TRAILING1  CONVERTING "123" TO "234"
+           IF TRAILING1 NOT = -22
+              DISPLAY "C7 - " TRAILING1
+              MOVE -22 TO TRAILING1.
+           INSPECT TRAILING2  CONVERTING "123" TO "234"
+           IF TRAILING2 NOT = +22
+              DISPLAY "C8 - " TRAILING2
+              MOVE +22 TO TRAILING2.
+
+           INSPECT SEPARATE1  REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF SEPARATE1 NOT = -33
+              DISPLAY "R1 - " SEPARATE1
+              MOVE -33 TO SEPARATE1.
+           INSPECT SEPARATE2  REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF SEPARATE2 NOT = +33
+              DISPLAY "R2 - " SEPARATE2
+              MOVE +33 TO SEPARATE2.
+           INSPECT TSEPARATE1 REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF TSEPARATE1 NOT = -33
+              DISPLAY "R3 - " TSEPARATE1
+              MOVE -33 TO TSEPARATE1.
+           INSPECT TSEPARATE2 REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF TSEPARATE2 NOT = +33
+              DISPLAY "R4 - " TSEPARATE2
+              MOVE +33 TO TSEPARATE2.
+           INSPECT NSEPARATE1 REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF NSEPARATE1 NOT = -33
+              DISPLAY "R5 - " NSEPARATE1
+              MOVE -33 TO NSEPARATE1.
+           INSPECT NSEPARATE2 REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF NSEPARATE2 NOT = +33
+              DISPLAY "R6 - " NSEPARATE2
+              MOVE +33 TO NSEPARATE2.
+           INSPECT TRAILING1  REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF TRAILING1 NOT = -33
+              DISPLAY "R7 - " TRAILING1
+              MOVE -33 TO TRAILING1.
+           INSPECT TRAILING2  REPLACING ALL "1" BY "2"
+                                            "2" BY "3"
+                                            "3" BY "4"
+           IF TRAILING2 NOT = +33
+              DISPLAY "R8 - " TRAILING2
+              MOVE +33 TO TRAILING2.
+
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
 AT_CLEANUP
 
 
@@ -1814,17 +1973,15 @@ AT_DATA([prog.cob], [
            INSPECT X TALLYING TAL FOR CHARACTERS
                      BEFORE INITIAL " ".
            IF TAL NOT = 3
-              DISPLAY TAL NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY TAL.
+
            MOVE 0 TO TAL.
            MOVE " ABC" TO X.
            INSPECT X TALLYING TAL FOR CHARACTERS
                      BEFORE INITIAL " ".
            IF TAL NOT = 0
-              DISPLAY TAL NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY TAL.
+
            STOP RUN.
 ])
 
@@ -1849,17 +2006,74 @@ AT_DATA([prog.cob], [
            INSPECT X TALLYING TAL FOR CHARACTERS
                      AFTER INITIAL " ".
            IF TAL NOT = 0
-              DISPLAY TAL NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY TAL.
+
            MOVE 0 TO TAL.
            MOVE " ABC" TO X.
            INSPECT X TALLYING TAL FOR CHARACTERS
                      AFTER INITIAL " ".
            IF TAL NOT = 3
-              DISPLAY TAL NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY TAL.
+
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([INSPECT TALLYING REPLACING BEFORE and AFTER])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  INSP-STRING   PIC X(26) VALUE 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.
+       01  EXPTD-RESULT  CONSTANT AS     'A22222111111111122222222YZ'.
+       01  RES-IDX       PIC 9(04) BINARY VALUE 100.
+       01  RES-IDX-1     PIC 9(04) BINARY VALUE 0.
+       PROCEDURE DIVISION.
+      *>
+           INSPECT INSP-STRING
+                   TALLYING RES-IDX   FOR CHARACTERS BEFORE 'H'
+                            RES-IDX-1 FOR CHARACTERS AFTER  'B'
+             REPLACING
+                   CHARACTERS BY '1' AFTER 'F' BEFORE 'Q'
+                   CHARACTERS BY '2' AFTER 'A' BEFORE 'Y'.
+      *>
+           IF INSP-STRING NOT = EXPTD-RESULT
+               DISPLAY 'Failed <' INSP-STRING '> != <' EXPTD-RESULT '>'.
+           IF RES-IDX NOT = 107
+               DISPLAY 'Failed <' RES-IDX   '> != <107>'.
+           IF RES-IDX-1 NOT = 19
+               DISPLAY 'Failed <' RES-IDX-1 '> != <19>'.
+      *>
+           GOBACK.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([INSPECT REPLACING figurative constant])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 X             PIC X(3) VALUE "BCA".
+       PROCEDURE        DIVISION.
+           INSPECT X REPLACING ALL "BC" BY SPACE.
+           IF X NOT = "  A"
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -1881,9 +2095,7 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            INSPECT X REPLACING TRAILING ZEROS BY SPACES.
            IF X NOT = "1   "
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY X.
            STOP RUN.
 ])
 
@@ -1894,23 +2106,31 @@ AT_CLEANUP
 
 
 AT_SETUP([INSPECT REPLACING complex])
-AT_KEYWORDS([runmisc])
+AT_KEYWORDS([runmisc CHARACTERS])
 
 AT_DATA([prog.cob], [
        IDENTIFICATION   DIVISION.
        PROGRAM-ID.      prog.
        DATA             DIVISION.
        WORKING-STORAGE  SECTION.
-       01 X             PIC X(12) VALUE "AAABBCDCCCCC".
+       01 X             PIC X(12) VALUE "AZABBCDCCECC".
        PROCEDURE        DIVISION.
            INSPECT X REPLACING
              ALL      "A" BY "Z"
                       "B" BY "Y"
-             TRAILING "C" BY "X".
-           IF X NOT = "ZZZYYCDXXXXX"
-              DISPLAY X NO ADVANCING
-              END-DISPLAY
-           END-IF.
+                      "Z" BY "0"
+             TRAILING "C" BY "X"
+           IF X NOT = "Z0ZYYCDCCEXX"
+              DISPLAY "1 - " X.
+
+           INSPECT X REPLACING
+             CHARACTERS BY SPACES
+              BEFORE  "C" AFTER "0"
+             CHARACTERS BY ZEROES
+              BEFORE  "E" AFTER "C"
+           IF X NOT = "Z0   C000EXX"
+              DISPLAY "2 - " X.
+
            STOP RUN.
 ])
 
@@ -1948,62 +2168,46 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            IF SWIT1-ON
               DISPLAY "ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY "OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY "OFF" NO ADVANCING.
+
            IF SWIT2-ON
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            IF SWIT3-ON
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            IF NOT SWIT4-OFF
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            SET SWIT1 TO OFF.
            SET SWIT2 TO ON.
            IF SWIT1-ON
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            IF SWIT2-ON
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF
+              DISPLAY " OFF" NO ADVANCING.
+
            IF SWIT31-ON
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            IF NOT SWIT36-OFF
               DISPLAY " ON" NO ADVANCING
-              END-DISPLAY
            ELSE
-              DISPLAY " OFF" NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY " OFF" NO ADVANCING.
+
            STOP RUN.
 ])
 
@@ -2028,7 +2232,6 @@ AT_DATA([prog.cob], [
              END-DISPLAY
              PERFORM 2 TIMES
                DISPLAY "Y" NO ADVANCING
-               END-DISPLAY
              END-PERFORM
            END-PERFORM.
            STOP RUN.
@@ -2040,7 +2243,7 @@ AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [XYYXYY])
 AT_CLEANUP
 
 
-AT_SETUP([PERFORM VARYING BY -0.2])
+AT_SETUP([PERFORM VARYING BY -0.2 decimal])
 AT_KEYWORDS([runmisc])
 
 AT_DATA([prog.cob], [
@@ -2048,21 +2251,59 @@ AT_DATA([prog.cob], [
        PROGRAM-ID.      prog.
        DATA             DIVISION.
        WORKING-STORAGE  SECTION.
-	   77 X             PIC 9v9.
+       77 X             PIC 9v9.
        PROCEDURE        DIVISION.
            PERFORM VARYING X FROM 0.8 BY -0.2
                    UNTIL   X < 0.4
              DISPLAY "X" NO ADVANCING
-             END-DISPLAY
            END-PERFORM.
-		   IF X NOT = 0.2
-		     DISPLAY "WRONG X: " X END-DISPLAY
-		   END-IF
+           IF X NOT = 0.2
+             DISPLAY "WRONG X: " X END-DISPLAY
+           END-IF
            STOP RUN.
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
 AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [XXX])
+
+AT_CLEANUP
+
+
+AT_SETUP([PERFORM VARYING Float])
+AT_KEYWORDS([perform])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  i USAGE FLOAT-LONG.
+
+       PROCEDURE DIVISION.
+           PERFORM VARYING i FROM 1.0 BY 1.0 UNTIL i > 5.0
+                 DISPLAY i " " NO ADVANCING
+           END-PERFORM .
+           DISPLAY "Test Part 1 Completed".
+           PERFORM VARYING i FROM 1 BY 1 UNTIL i > 5
+                 DISPLAY i " " NO ADVANCING
+           END-PERFORM .
+           DISPLAY "Test Part 2 Completed".
+           PERFORM VARYING i FROM 5 BY -1 UNTIL i < 1
+                 DISPLAY i " " NO ADVANCING
+           END-PERFORM .
+           DISPLAY "Test Part 3 Completed".
+           STOP RUN.
+           END PROGRAM prog.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0],
+[1 2 3 4 5 Test Part 1 Completed
+1 2 3 4 5 Test Part 2 Completed
+5 4 3 2 1 Test Part 3 Completed
+], [])
 
 AT_CLEANUP
 
@@ -2075,15 +2316,15 @@ AT_DATA([prog.cob], [
        PROGRAM-ID.      prog.
        DATA             DIVISION.
        WORKING-STORAGE  SECTION.
-	   77 X             PIC 9.
+       77 X             PIC 9.
        PROCEDURE        DIVISION.
            PERFORM VARYING X FROM 4
                    UNTIL   X > 6
              DISPLAY "X" NO ADVANCING
            END-PERFORM.
-		   IF X NOT = 7
-		     DISPLAY "WRONG X: " X
-		   END-IF
+           IF X NOT = 7
+             DISPLAY "WRONG X: " X
+           END-IF
            STOP RUN.
 ])
 
@@ -2107,10 +2348,8 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            PERFORM 2 TIMES
              DISPLAY "OK" NO ADVANCING
-             END-DISPLAY
              EXIT PERFORM
              DISPLAY "NOT OK"
-             END-DISPLAY
            END-PERFORM
            STOP RUN.
 ])
@@ -2132,10 +2371,8 @@ AT_DATA([prog.cob], [
        PROCEDURE        DIVISION.
            PERFORM 2 TIMES
              DISPLAY "OK" NO ADVANCING
-             END-DISPLAY
              EXIT PERFORM CYCLE
              DISPLAY "NOT OK"
-             END-DISPLAY
            END-PERFORM
            STOP RUN.
 ])
@@ -2150,6 +2387,9 @@ AT_CLEANUP
 
 AT_SETUP([EXIT PARAGRAPH])
 AT_KEYWORDS([runmisc])
+
+# Note: testing EXIT PARAGRPAPH without being PERFORMed
+#       implicit GO TO only
 
 AT_DATA([prog.cob], [
        IDENTIFICATION   DIVISION.
@@ -2166,8 +2406,7 @@ AT_DATA([prog.cob], [
            END-PERFORM.
        A02.
            IF INDVAL NOT = 3
-              DISPLAY INDVAL NO ADVANCING
-              END-DISPLAY
+              DISPLAY INDVAL
            END-IF.
            STOP RUN.
 ])
@@ -2182,6 +2421,9 @@ AT_CLEANUP
 
 AT_SETUP([EXIT SECTION])
 AT_KEYWORDS([runmisc])
+
+# Note: testing EXIT SECTION without being PERFORMed
+#       implicit GO TO only
 
 AT_DATA([prog.cob], [
        IDENTIFICATION   DIVISION.
@@ -2198,18 +2440,45 @@ AT_DATA([prog.cob], [
             END-IF
            END-PERFORM.
        A012.
-           DISPLAY INDVAL NO ADVANCING
-           END-DISPLAY.
+           DISPLAY INDVAL.
        A02 SECTION.
            IF INDVAL NOT = 3
-              DISPLAY INDVAL NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY INDVAL.
            STOP RUN.
 ])
 
-AT_CHECK([$COMPILE prog.cob], [0], [], [])
+# disabling the check for "something leaves the section" - as this is
+# guaranteed to happen with this EXIT SECTION as GO TO
+AT_CHECK([$COMPILE -fno-section-exit-check prog.cob], [0], [], [])
 AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CHECK([$COMPILE -fsection-exit-check prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [1], [],
+[libcob: prog.cob:12: error: code execution leaving A01
+])
+
+AT_CLEANUP
+
+
+AT_SETUP([implicit GOBACK at end of PROCEDURE DIVISION])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+       PROCEDURE        DIVISION.
+       A01 SECTION.
+       A011.
+          CONTINUE.
+])
+
+AT_CHECK([$COMPILE -fno-implicit-goback-check prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CHECK([$COMPILE -fimplicit-goback-check prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [1], [],
+[libcob: prog.cob:8: error: code execution leaving PROCEDURE DIVISION
+])
 
 AT_CLEANUP
 
@@ -2269,8 +2538,7 @@ AT_DATA([prog.cob], [
             BY 1 UNTIL INDVAL > 2
            END-PERFORM
            IF INDVAL NOT = 3
-              DISPLAY INDVAL NO ADVANCING
-              END-DISPLAY
+              DISPLAY INDVAL
            END-IF
            STOP RUN
            .
@@ -2295,8 +2563,7 @@ AT_DATA([prog.cob], [
            PERFORM VARYING INDVAL FROM 1
             BY 1 UNTIL INDVAL > 2.
            IF INDVAL NOT = 3
-              DISPLAY INDVAL NO ADVANCING
-              END-DISPLAY
+              DISPLAY INDVAL
            END-IF
            .
 ])
@@ -2318,14 +2585,11 @@ AT_DATA([prog.cob], [
        01  X            PIC 9(2) VALUE 0.
        01  Y            PIC 9(2) VALUE 0.
        PROCEDURE        DIVISION.
-           COMPUTE X = 100
-           END-COMPUTE.
-           COMPUTE Y = 99
-           END-COMPUTE.
-           IF Y NOT = 99
-              DISPLAY Y NO ADVANCING
-              END-DISPLAY
-           END-IF.
+           COMPUTE X = 100. *> this overflows which does not store a result
+           COMPUTE Y = 99.  *> and once in a time this result was not stored
+           IF X NOT = 0 AND
+              Y NOT = 99
+              DISPLAY Y.
            STOP RUN.
 ])
 
@@ -2369,10 +2633,93 @@ AT_DATA([prog.cob], [
            STRING "abc" INTO X(2)
            END-STRING.
            IF G NOT = "   abc   "
-              DISPLAY X(1) NO ADVANCING
-              END-DISPLAY
+              DISPLAY X(1)
            END-IF.
            STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([STRING WITH POINTER ON OVERFLOW with DELIMITER])
+AT_KEYWORDS([runmisc exceptions])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. StringTest.
+      *>----------------------------------------------------------------
+      *>           Additional test cases for STRING statement
+      *> Testing string  with POINTER clause and with OVERFLOW
+      *> managment associated to POINTER clause
+      *> Testing also String with delimiter
+      *>----------------------------------------------------------------
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+      *>-----------------------
+       01  TRGT-STRING   PIC X(03) VALUE SPACES.
+       01  STR-POINTER   PIC 9(02).
+       01  SRC-DELIM     PIC X(01).
+
+       PROCEDURE DIVISION.
+      *>-------------------
+      *>
+      *> case A: Pointer is between 1 and less than TRGT-STRING LENGTH
+      *>         Should not overflow
+            MOVE 1 to STR-POINTER.
+            STRING 'A' 'B' 'C' DELIMITED BY SIZE
+                   INTO TRGT-STRING
+                   WITH POINTER STR-POINTER
+                   ON OVERFLOW
+                      DISPLAY 'Case A: Should not overflow' END-DISPLAY
+            END-STRING.
+            IF TRGT-STRING NOT = 'ABC'
+                DISPLAY 'A: TRTG-STRING <' TRGT-STRING '> != <ABC>'.
+            IF STR-POINTER NOT = 4
+                DISPLAY 'A: STR-POINTER <' STR-POINTER '> != <04>'.
+      *>
+      *>  case B: Pointer is 0 --> Should  overflow
+            MOVE 0                        TO STR-POINTER.
+            MOVE SPACES                   TO TRGT-STRING.
+            STRING 'A' 'B' 'C'  DELIMITED BY SIZE
+                   INTO TRGT-STRING
+                   WITH POINTER STR-POINTER
+                   NOT ON OVERFLOW
+                      DISPLAY 'Case B: Should overflow' END-DISPLAY
+            END-STRING.
+            IF TRGT-STRING NOT = SPACES
+                DISPLAY 'B: TRTG-STRING <' TRGT-STRING '> != SPACES'.
+            IF STR-POINTER NOT = 0
+                DISPLAY 'B: STR-POINTER <' STR-POINTER '> != <00>'.
+      *>
+      *>  case C: Pointer is 4 --> Should  overflow
+            MOVE 4                        TO STR-POINTER.
+            MOVE SPACES                   TO TRGT-STRING.
+            STRING 'A' 'B' 'C' DELIMITED BY SIZE
+                   INTO TRGT-STRING
+                   WITH POINTER STR-POINTER
+                   NOT ON OVERFLOW
+                      DISPLAY 'Case C: Should overflow' END-DISPLAY
+            END-STRING.
+            IF TRGT-STRING NOT = SPACES
+                DISPLAY 'C: TRTG-STRING <' TRGT-STRING '> != SPACES'.
+            IF STR-POINTER NOT = 4
+                DISPLAY 'C: STR-POINTER <' STR-POINTER '> != <04>'.
+      *>
+      *>  case D: Test with delimiter
+            MOVE 1      TO STR-POINTER.
+            MOVE '|'    TO SRC-DELIM.
+            MOVE SPACES TO TRGT-STRING.
+            STRING '1|2' 'A|B' 'C|D'   DELIMITED BY SRC-DELIM
+                    INTO TRGT-STRING
+                    WITH POINTER STR-POINTER
+            END-STRING.
+            IF TRGT-STRING NOT = '1AC'
+                DISPLAY 'D: TRGT-STRING <' TRGT-STRING '> != <1AC>'.
+      *>
+            GOBACK.
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
@@ -2841,6 +3188,72 @@ BVAL is 0240
 
 AT_CLEANUP
 
+AT_SETUP([PICTURE COMP-X (2)])
+AT_KEYWORDS([Numeric])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA  DIVISION.
+       WORKING-STORAGE SECTION.
+       01  TSTN-4   PIC X(4)  COMP-N.
+       01  TSTN-8   PIC X(8)  COMP-N.
+       01  TSTX-4   PIC X(4)  COMP-5.
+       01  TSTX-8   PIC X(8)  COMP-X.
+       01  TST9-12  PIC 9(12) COMP-X.
+       01  TST9-19  PIC 9(19) COMP-X.
+       01  TSTB-34  PIC 9(34).
+       01  TST5-2   PIC 9(2)  COMP-5.
+       01  TST5-3   PIC 9(3)  COMP-5.
+       01  TST5-6   PIC 9(6)  COMP-5.
+       01  TST5-8   PIC 9(8)  COMP-5.
+
+       PROCEDURE DIVISION.
+           MOVE 96 TO TST5-2.
+           DISPLAY "TST5-2 :" TST5-2 ", Length: " LENGTH OF TST5-2.
+           MOVE 4096 TO TST5-3.
+           DISPLAY "TST5-3 :" TST5-3 ", Length: " LENGTH OF TST5-3.
+           MOVE 4096 TO TST5-6.
+           DISPLAY "TST5-6 :" TST5-6 ", Length: " LENGTH OF TST5-6.
+           MOVE 4096 TO TST5-8.
+           DISPLAY "TST5-8 :" TST5-8 ", Length: " LENGTH OF TST5-8.
+           MOVE 4294967295 TO TSTX-4.
+           DISPLAY "TSTX-4 :" TSTX-4 ", Length: " LENGTH OF TSTX-4.
+           MOVE 9223372036854775807 TO TSTX-8.
+           DISPLAY "TSTX-8 :" TSTX-8 ", Length: " LENGTH OF TSTX-8.
+           MOVE 4294967295 TO TSTN-4.
+           DISPLAY "TSTN-4 :" TSTN-4 ", Length: " LENGTH OF TSTN-4.
+           MOVE 9223372036854775807 TO TSTN-8.
+           DISPLAY "TSTN-8 :" TSTN-8 ", Length: " LENGTH OF TSTN-8.
+           MOVE 999999999999        TO TST9-12.
+           DISPLAY "TST9-12:" TST9-12 ", Length: " LENGTH OF TST9-12.
+           MOVE 9223372036854775807 TO TST9-19.
+           DISPLAY "TST9-19:" TST9-19 ", Length: " LENGTH OF TST9-19.
+           MOVE 999999999999999999999999999999999 TO TSTB-34.
+           DISPLAY "TSTB-34:" TSTB-34 ", Length: " LENGTH OF TSTB-34.
+           COMPUTE TSTB-34 = TSTB-34 * 10000000000.
+           DISPLAY "TSTB-34:" TSTB-34 ", Length: " LENGTH OF TSTB-34.
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE -std=default prog.cob ], [0], [], [])
+
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [TST5-2 :096, Length: 1
+TST5-3 :04096, Length: 2
+TST5-6 :0000004096, Length: 4
+TST5-8 :0000004096, Length: 4
+TSTX-4 :4294967295, Length: 4
+TSTX-8 :9223372036854775807, Length: 8
+TSTN-4 :4294967295, Length: 4
+TSTN-8 :09223372036854775807, Length: 8
+TST9-12:999999999999, Length: 5
+TST9-19:9223372036854775807, Length: 8
+TSTB-34:0999999999999999999999999999999999, Length: 34
+TSTB-34:9999999999999999999999990000000000, Length: 34
+], [])
+
+AT_CLEANUP
+
 
 AT_SETUP([SORT: table sort])
 AT_KEYWORDS([runmisc])
@@ -3098,6 +3511,28 @@ AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [0403020101020304], [])
 
 AT_CHECK([$COMPILE prog2.cob], [0], [], [])
 AT_CHECK([$COBCRUN_DIRECT ./prog2], [0], [0004030201], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([SORT: table sort (toplevel)])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 VAL           PIC X(5) VALUE "43512".
+       01 TBL           REDEFINES VAL PIC X OCCURS 5.
+       PROCEDURE        DIVISION.
+           SORT TBL ASCENDING
+           IF VAL NOT = "12345" DISPLAY VAL.
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
 
 AT_CLEANUP
 
@@ -3649,8 +4084,12 @@ AT_CHECK([$COBCRUN_DIRECT ./caller], [0], [], [])
 AT_CLEANUP
 
 
-AT_SETUP([CALL in from C])
-AT_KEYWORDS([runmisc])
+AT_SETUP([direct CALL in from C w/wo error])
+AT_KEYWORDS([runmisc cobcall cob_call cob_init cob_runtime_hint])
+
+# tests and showcases direct C calls, including:
+# as long as the module comes back the caller has control
+# and its return code; but not in the case for errors or STOP RUN
 
 AT_DATA([callee.cob], [
        IDENTIFICATION   DIVISION.
@@ -3664,8 +4103,217 @@ AT_DATA([callee.cob], [
               DISPLAY 'UNEXPECTED P2: ' P2
               END-DISPLAY
            END-IF
+           DISPLAY 'P1: ' P1 WITH NO ADVANCING.
+           GOBACK.
+])
+
+AT_DATA([callee2.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      callee2.
+       DATA             DIVISION.
+       LINKAGE          SECTION.
+       01 P             PIC 99.
+       PROCEDURE        DIVISION USING P.
+           DISPLAY 'P: ' P WITH NO ADVANCING.
+           STOP RUN RETURNING P.
+])
+
+AT_DATA([caller.c], [[
+#include <stdio.h>
+#include <libcob.h>
+
+#ifndef NULL
+#define NULL (void*)0
+#endif
+
+int
+main (int argc, char **argv)
+{
+   /* for storing COBOL return code */
+   int cob_ret;
+
+   /* initialize parameters */
+   void *cob_argv[2];
+
+   cob_argv[0] = argv[2];
+   cob_argv[1] = NULL;
+
+   /* initialize the COBOL run-time library */
+   cob_init(argc, argv);
+
+   /* call COBOL program */
+   cob_ret = cob_call (argv[1], 2, cob_argv);
+
+   cob_runtime_hint("program exited normally, "
+       "without STOP RUN with status %d", cob_ret);
+
+   /* Clean up and terminate - This does not return */
+   cob_stop_run (cob_ret);
+}
+]])
+
+AT_CHECK([$COMPILE caller.c], [0], [], [])
+AT_CHECK([$COMPILE_MODULE callee.cob callee2.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./caller callee A], [0], [P1: A],
+[note: program exited normally, without STOP RUN with status 0
+])
+AT_CHECK([$COBCRUN_DIRECT ./caller callee2 42], [42], [P: 42], [])
+AT_CHECK([$COBCRUN_DIRECT ./caller notthere], [1], [],
+[libcob: error: module 'notthere' not found
+])
+
+AT_CLEANUP
+
+
+AT_SETUP([direct CALL in from C w/wo error; no exit])
+AT_KEYWORDS([runmisc cobcall cob_call cob_call_with_exception_check cob_runtime_hint])
+
+# tests and showcases the "functional call" of GnuCOBOL modules;
+# in every case (plain goback, STOP RUN, error) the caller gets control,
+# but the actual return / error code has to be queried with an extra call
+
+AT_DATA([callee.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      callee.
+       DATA             DIVISION.
+       LINKAGE          SECTION.
+       01 P1            PIC X.
+       01 RC            PIC 99.
+       01 P2            PIC X(6).
+       PROCEDURE        DIVISION USING P1 RC OPTIONAL P2.
+           IF P2 NOT OMITTED
+              DISPLAY 'UNEXPECTED P2: ' P2.
            DISPLAY 'P1: ' P1 WITH NO ADVANCING
-           END-DISPLAY.
+           GOBACK RETURNING RC.
+])
+
+AT_DATA([callee2.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      callee2.
+       PROCEDURE        DIVISION.
+           DISPLAY 'STOP WITH 2' WITH NO ADVANCING
+           STOP RUN RETURNING 2.
+])
+
+AT_DATA([buggy.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      buggy.
+       DATA             DIVISION.
+       LOCAL-STORAGE    SECTION.
+       77 VAR           PIC X.
+       77 VPOS          PIC 9 VALUE 2.
+       PROCEDURE        DIVISION.
+           DISPLAY 'out of bounds - refmod following' WITH NO ADVANCING
+           DISPLAY VAR (VPOS:)
+           DISPLAY 'AFTER ERROR'
+           GOBACK.
+])
+
+AT_DATA([caller.c], [[
+#include <stdio.h>
+#include <libcob.h>
+
+#ifndef NULL
+#define NULL (void*)0
+#endif
+
+int
+main (int argc, char **argv)
+{
+   /* for storing libcob return state */
+   int cob_ret;
+
+   /* initialize parameters */
+   void *cob_argv[3];
+
+   char *p1 = "A";
+   cob_argv[0] = p1;
+   cob_argv[1] = argv[2];
+   cob_argv[2] = NULL;
+
+   /* initialize the COBOL run-time library */
+   cob_init (argc, argv);
+
+   /* call COBOL program */
+   cob_ret = cob_call_with_exception_check (argv[1], 2, cob_argv);
+
+   switch (cob_ret) {
+   case 0:  /* program coming back */
+
+      /* Clean up and terminate runtime */
+      cob_runtime_hint("program exited with return code %d",
+         cob_last_exit_code ());
+      cob_tidy ();
+      break;
+
+   case 1:  /* normal exit */
+      cob_runtime_hint("STOP RUN with return code %d",
+         cob_last_exit_code ());
+      break;
+
+   case -1:  /* error exit */
+      cob_runtime_hint("error exit with return code %d and error \"%s\"",
+         cob_last_exit_code (), cob_last_runtime_error ());
+      break;
+
+   case -2:  /* hard error exit */
+      cob_runtime_hint("hard error exit with return code %d and error \"%s\"",
+         cob_last_exit_code (), cob_last_runtime_error ());
+      break;
+
+   case -3:  /* signal handler  exit */
+      cob_runtime_hint("signal handler exit with signal %d and error \"%s\"",
+         cob_last_exit_code (), cob_last_runtime_error ());
+      break;
+
+   default:
+      cob_runtime_hint("unexpected return from cob_call_with_exception_check, "
+         "last exit code %d, last error \"%s\"",
+         cob_last_exit_code (), cob_last_runtime_error ());
+      break;
+   }
+   return 0;
+}
+]])
+
+AT_CHECK([$COMPILE caller.c], [0], [], [])
+AT_CHECK([$COMPILE_MODULE callee.cob callee2.cob buggy.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./caller callee 00], [0], [P1: A],
+[note: program exited with return code 0
+])
+AT_CHECK([$COBCRUN_DIRECT ./caller callee 42], [0], [P1: A],
+[note: program exited with return code 42
+])
+AT_CHECK([$COBCRUN_DIRECT ./caller callee2], [0], [STOP WITH 2],
+[note: STOP RUN with return code 2
+])
+AT_CHECK([$COBCRUN_DIRECT ./caller buggy], [0], [out of bounds - refmod following],
+[libcob: buggy.cob:10: error: offset of 'VAR' out of bounds: 2, maximum: 1
+note: error exit with return code -1 and error "buggy.cob:10: offset of 'VAR' out of bounds: 2, maximum: 1"
+])
+AT_CHECK([$COBCRUN_DIRECT ./caller notthere], [0], [],
+[libcob: error: module 'notthere' not found
+note: error exit with return code -1 and error "module 'notthere' not found"
+])
+
+AT_CLEANUP
+
+
+AT_SETUP([CALL in from C, cob_call_params explicitly set])
+AT_KEYWORDS([runmisc])
+
+AT_DATA([callee.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      callee.
+       DATA             DIVISION.
+       LINKAGE          SECTION.
+       01 P1            PIC X.
+       01 P2            PIC X(6).
+       PROCEDURE        DIVISION USING P1 OPTIONAL P2.
+           IF P2 NOT OMITTED
+              DISPLAY 'UNEXPECTED P2: ' P2
+           END-IF
+           DISPLAY 'P1: ' P1 WITH NO ADVANCING
            EXIT PROGRAM.
 ])
 
@@ -4303,7 +4951,6 @@ AT_DATA([prog.cob], [
        01 X             PIC X(4) BASED.
        PROCEDURE        DIVISION.
            DISPLAY X NO ADVANCING
-           END-DISPLAY.
            STOP RUN.
 ])
 
@@ -4316,7 +4963,6 @@ AT_DATA([prog2.cob], [
           05 Y          PIC X(4).
        PROCEDURE        DIVISION.
            DISPLAY Y NO ADVANCING
-           END-DISPLAY.
            STOP RUN.
 ])
 
@@ -4359,9 +5005,7 @@ AT_DATA([callee.cob], [
           05 Y          PIC X(4).
        PROCEDURE        DIVISION USING OPTIONAL X.
            IF Y NOT = '9876'
-              DISPLAY Y NO ADVANCING
-              END-DISPLAY
-           END-IF.
+              DISPLAY Y.
            GOBACK.
 ])
 
@@ -6228,6 +6872,111 @@ AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
 AT_CLEANUP
 
 
+AT_SETUP([PICTURE with Edit mask])
+AT_KEYWORDS([numeric])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA  DIVISION.
+       WORKING-STORAGE SECTION.
+       01  TST.
+           05 DEPT-SUB        PIC 9(7)V999 VALUE 18536.232.
+           05 DEPT-COST-YTD   PIC 9(5)V999 VALUE 18536.232.
+           05 DL-PROD-COST    PIC $$$,$$9.99.
+       77  WFLT  PIC $$$,$$9.99.
+
+       PROCEDURE DIVISION.
+           MOVE 18536.23 TO WFLT.
+           DISPLAY "WFLT IS " WFLT.
+           MULTIPLY DEPT-COST-YTD BY 1 GIVING DL-PROD-COST ROUNDED.
+           DISPLAY "COST IS " DL-PROD-COST.
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0],
+[WFLT IS $18,536.23
+COST IS $18,536.23
+], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([COMP-3 Index])
+AT_KEYWORDS([numeric])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-PAGE-NUMBER PIC 9(4) COMP-3 VALUE ZERO.
+       01 WS-LINE-NUMBER PIC 9(3) VALUE ZERO.
+       PROCEDURE DIVISION.
+       PERFORM VARYING WS-LINE-NUMBER FROM 1 BY 1
+                 UNTIL WS-LINE-NUMBER > 10
+       ADD 1 TO WS-PAGE-NUMBER
+       DISPLAY WS-PAGE-NUMBER
+       END-PERFORM.
+       STOP RUN RETURNING 0.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0],
+[0001
+0002
+0003
+0004
+0005
+0006
+0007
+0008
+0009
+0010
+], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([POINTER])
+AT_KEYWORDS([numeric])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID. prog.
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 XX.
+         02 XX-1           PIC X(4) VALUE "1234".
+         02 XX-2           PIC X(4) VALUE "5678".
+       01 P-XX-1        POINTER.
+       01 P-XX-2        POINTER.
+       LINKAGE          SECTION.
+       01 Y2            PIC X(4).
+       PROCEDURE        DIVISION.
+         SET P-XX-1 TO ADDRESS OF XX-1
+         SET P-XX-2 TO ADDRESS OF XX-2
+         SET ADDRESS OF Y2 TO ADDRESS OF XX-1
+         SET ADDRESS OF Y2 UP BY 4
+         IF Y2 NOT = XX-2
+            DISPLAY "Test 2 '" Y2 "'"
+            END-DISPLAY
+         END-IF
+         IF ADDRESS OF Y2 NOT = P-XX-2
+            DISPLAY "NOK"
+         END-IF
+         STOP RUN.
+])
+
+AT_CHECK([$COMPILE prog.cob], [0], [], [])
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [], [])
+
+AT_CLEANUP
+
+
 AT_SETUP([ON EXCEPTION clause of DISPLAY])
 AT_KEYWORDS([runmisc exceptions screen])
 
@@ -6248,7 +6997,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
-AT_CHECK([COB_EXIT_WAIT=0 ./prog], [0], ignore, [])
+AT_CHECK([COB_EXIT_WAIT=0 $COBCRUN_DIRECT ./prog], [0], ignore, [])
 
 AT_CLEANUP
 
@@ -6289,7 +7038,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
-AT_CHECK([COB_EXIT_WAIT=0 ./prog], [0], ignore, [])
+AT_CHECK([COB_EXIT_WAIT=0 $COBCRUN_DIRECT ./prog], [0], ignore, [])
 
 AT_CLEANUP
 
@@ -6327,7 +7076,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE  -faccept-display-extensions=error prog.cob], [0], [], [])
-AT_CHECK([COB_EXIT_WAIT=0 ./prog], [0], ignore, [])
+AT_CHECK([COB_EXIT_WAIT=0 $COBCRUN_DIRECT ./prog], [0], ignore, [])
 
 AT_CLEANUP
 
@@ -6670,13 +7419,21 @@ AT_CLEANUP
 # and    -fsource-location, which is implied by -debug/g
 AT_SETUP([READY TRACE / RESET TRACE])
 AT_KEYWORDS([runmisc -ftrace -ftraceall -fsource-location
-CALL RECURSIVE RETURN-CODE
+CALL RECURSIVE RETURN-CODE SEARCH
 COB_PHYSICAL_CANCEL COB_PRE_LOAD])
 
 AT_DATA([caller.cob], [
        IDENTIFICATION   DIVISION.
        PROGRAM-ID.      caller.
-      *
+       DATA             DIVISION.
+       WORKING-STORAGE  SECTION.
+       01 ttab.
+          03 tentries   PIC 9 VALUE 0.
+          03 tentry     OCCURS 0 TO 5    DEPENDING ON tentries
+                        ASCENDING KEY tkey INDEXED BY tidx.
+             05 tkey    pic x(3).
+       78 ZER  VALUE ZERO.
+      *>
        PROCEDURE        DIVISION.
            READY TRACE
            MOVE 1 TO RETURN-CODE
@@ -6691,6 +7448,41 @@ AT_DATA([caller.cob], [
            CANCEL "callee1"
            CALL "callrec"
            MOVE 0 TO RETURN-CODE
+      *>
+           SEARCH ALL tentry
+              AT END
+                 ADD  1    TO tentries
+                 SET  tidx TO tentries
+                 MOVE 'A'  TO tkey(tidx)
+              WHEN tkey(tidx) = 'A'
+                 DISPLAY '*Magic*'
+           END-SEARCH
+      *> tidx is still one, expect a direct find
+           SEARCH tentry
+              AT END
+                 DISPLAY '*Dark Magic*'
+              WHEN tkey(tidx) = 'A'
+                 ADD  1    TO tentries
+                 SET  tidx TO tentries
+                 MOVE 'B'  TO tkey(tidx)
+           END-SEARCH
+      *> tidx is still two, expect end
+           SEARCH tentry
+              VARYING tidx
+              AT END
+                 ADD  1    TO tentries
+                 SET  tidx TO tentries
+                 MOVE 'C'  TO tkey(tidx)
+              WHEN tkey(tidx) = ZER
+                 DISPLAY '* Darker Magic *'
+           END-SEARCH
+           SEARCH ALL tentry
+              AT END
+                 DISPLAY 'NO COMMENT'
+              WHEN tkey(tidx) = 'C'
+                 CONTINUE
+           END-SEARCH
+      *>
            STOP RUN.
 ])
 
@@ -6771,7 +7563,7 @@ AT_DATA([preload2.cob], [
        PROGRAM-ID.      callrec IS RECURSIVE.
        DATA             DIVISION.
        WORKING-STORAGE  SECTION.
-       01 filler        PIC 9 VALUE 0.
+       01 called-var    PIC 9 VALUE 0.
           88 first-call VALUE 0.
           88 called     VALUE 1.
        PROCEDURE        DIVISION.
@@ -6779,7 +7571,27 @@ AT_DATA([preload2.cob], [
            IF first-call
               SET called TO TRUE
               CALL 'callrec'
+      *>      abbreviated 2 stmts
+              MOVE 0 TO RETURN-CODE, called-var
+      *>      both PERFORM and UNTIL on the same line
+              PERFORM UNTIL RETURN-CODE = 3
+      *>         now PERFORM and UNTIL on different line and
+      *>         constant TRUE condition after compile-time optimization
+                 PERFORM WITH TEST AFTER
+                         UNTIL 1 = 3 - 2
+      *>            no UNTIL - only PERFORM
+                    PERFORM 2 TIMES
+                       COMPUTE RETURN-CODE = 1 + 2
+                    END-PERFORM
+                 END-PERFORM
+              END-PERFORM
+      *>      2 different stmts, same line
+              INITIALIZE RETURN-CODE  SET first-call TO TRUE
+      *>      2 identical stmts, same line
+              MOVE RETURN-CODE TO called-var  MOVE 0 TO RETURN-CODE
+              SET called TO TRUE
            END-IF
+      *>
            GOBACK.
 ])
 
@@ -6794,7 +7606,7 @@ AT_DATA([callee2c.cob], [
        END-PAR.
            EXIT PROGRAM.
        OTHER-SEC SECTION.
-           COMPUTE RETURN-CODE = 1 + 2 END-COMPUTE.
+           COMPUTE RETURN-CODE = 1 + 2.
        EX. EXIT.
 ])
 
@@ -6804,115 +7616,146 @@ AT_CHECK([$COBC -ftrace preload.cob], [0], [], [])
 AT_CHECK([$COBC -ftraceall preload2.cob], [0], [], [])
 AT_CHECK([$COBC -fsource-location callee2c.cob], [0], [], [])
 AT_CHECK([$COBC -x -o prog -ftraceall caller.cob], [0], [], [])
-AT_CHECK([COB_PHYSICAL_CANCEL=1 COB_PRE_LOAD="preload"$PATHSEP"preload2" $COBCRUN_DIRECT ./prog], [0], [],
+AT_CHECK([COB_PHYSICAL_CANCEL=1 COB_PRE_LOAD="preload"$PATHSEP"preload2" \
+ $COBCRUN_DIRECT ./prog], [0], [],
 [Source: 'caller.cob'
-Program-Id: caller
-Program-Id: caller                      MOVE                            Line:      7
-Program-Id: caller                      RESET TRACE                     Line:      8
-Program-Id: caller                      MOVE                            Line:     12
-Program-Id: caller                      CALL                            Line:     13
+Program-Id:  caller
+Program-Id:  caller                      MOVE                            Line:     15
+Program-Id:  caller                      RESET TRACE                     Line:     16
+Program-Id:  caller                      MOVE                            Line:     20
+Program-Id:  caller                      CALL                            Line:     21
 Source: 'callee1.cob'
-Program-Id: callee1
-Program-Id: callee1              Entry: callee1                         Line:      4
-Program-Id: callee1                     ADD                             Line:      5
-Program-Id: callee1                     IF                              Line:      7
-Program-Id: callee1                     IF                              Line:      9
-Program-Id: callee1                     CONTINUE                        Line:     12
-Program-Id: callee1                     EVALUATE                        Line:     14
-Program-Id: callee1                     WHEN                            Line:     15
-Program-Id: callee1                     WHEN                            Line:     18
-Program-Id: callee1                     CONTINUE                        Line:     21
-Program-Id: callee1                     EVALUATE                        Line:     23
-Program-Id: callee1                     WHEN                            Line:     24
-Program-Id: callee1                     WHEN                            Line:     27
-Program-Id: callee1                     CONTINUE                        Line:     30
-Program-Id: callee1                     CALL                            Line:     32
-Program-Id: callee1                     CANCEL                          Line:     33
-Program-Id: callee1                     CALL                            Line:     33
+Program-Id:  callee1
+Program-Id:  callee1              Entry: callee1                         Line:      4
+Program-Id:  callee1                     ADD                             Line:      5
+Program-Id:  callee1                     IF                              Line:      7
+Program-Id:  callee1                     IF                              Line:      9
+Program-Id:  callee1                     CONTINUE                        Line:     12
+Program-Id:  callee1                     EVALUATE                        Line:     14
+Program-Id:  callee1                     WHEN                            Line:     15
+Program-Id:  callee1                     WHEN                            Line:     18
+Program-Id:  callee1                     CONTINUE                        Line:     21
+Program-Id:  callee1                     EVALUATE                        Line:     23
+Program-Id:  callee1                     WHEN                            Line:     24
+Program-Id:  callee1                     WHEN                            Line:     27
+Program-Id:  callee1                     CONTINUE                        Line:     30
+Program-Id:  callee1                     CALL                            Line:     32
+Program-Id:  callee1                     CANCEL                          Line:     33
+Program-Id:  callee1                     CALL                            Line:     33
 Source: 'preload.cob'
-Program-Id: callee2b
-Program-Id: callee2b             Entry: callee2b                        Line:      4
-Program-Id: callee2b           Section: SOME-SEC                        Line:      5
-Program-Id: callee2b         Paragraph: SOME-PAR                        Line:      6
-Program-Id: callee2b           Section: OTHER-SEC                       Line:     12
-Program-Id: callee2b         Paragraph: EX                              Line:     14
-Program-Id: callee2b             Entry: LEAVE-ME                        Line:     14
-Program-Id: callee2b         Paragraph: END-PAR                         Line:     10
-Program-Id: callee2b              Exit: callee2b                        Line:     10
+Program-Id:  callee2b
+Program-Id:  callee2b             Entry: callee2b                        Line:      4
+Program-Id:  callee2b           Section: SOME-SEC                        Line:      5
+Program-Id:  callee2b         Paragraph: SOME-PAR                        Line:      6
+Program-Id:  callee2b           Section: OTHER-SEC                       Line:     12
+Program-Id:  callee2b         Paragraph: EX                              Line:     14
+Program-Id:  callee2b             Entry: LEAVE-ME                        Line:     14
+Program-Id:  callee2b         Paragraph: END-PAR                         Line:     10
+Program-Id:  callee2b              Exit: callee2b                        Line:     10
 Source: 'callee1.cob'
-Program-Id: callee1
-Program-Id: callee1                     CANCEL                          Line:     33
-Program-Id: callee1                     SUBTRACT                        Line:     34
-Program-Id: callee1                     EXIT PROGRAM                    Line:     35
-Program-Id: callee1               Exit: callee1                         Line:     35
+Program-Id:  callee1
+Program-Id:  callee1                     CANCEL                          Line:     33
+Program-Id:  callee1                     SUBTRACT                        Line:     34
+Program-Id:  callee1                     EXIT PROGRAM                    Line:     35
+Program-Id:  callee1               Exit: callee1                         Line:     35
 Source: 'caller.cob'
-Program-Id: caller
-Program-Id: caller                      CALL                            Line:     15
+Program-Id:  caller
+Program-Id:  caller                      CALL                            Line:     23
 Source: 'callee1.cob'
-Program-Id: callee1
-Program-Id: callee1              Entry: callee1                         Line:      4
-Program-Id: callee1                     ADD                             Line:      5
-Program-Id: callee1                     IF                              Line:      7
-Program-Id: callee1                     IF                              Line:      9
-Program-Id: callee1                     CONTINUE                        Line:     12
-Program-Id: callee1                     EVALUATE                        Line:     14
-Program-Id: callee1                     WHEN                            Line:     15
-Program-Id: callee1                     WHEN                            Line:     18
-Program-Id: callee1                     CONTINUE                        Line:     21
-Program-Id: callee1                     EVALUATE                        Line:     23
-Program-Id: callee1                     WHEN                            Line:     24
-Program-Id: callee1                     WHEN                            Line:     27
-Program-Id: callee1                     CONTINUE                        Line:     30
-Program-Id: callee1                     CALL                            Line:     32
-Program-Id: callee1                     CANCEL                          Line:     33
-Program-Id: callee1                     CALL                            Line:     33
+Program-Id:  callee1
+Program-Id:  callee1              Entry: callee1                         Line:      4
+Program-Id:  callee1                     ADD                             Line:      5
+Program-Id:  callee1                     IF                              Line:      7
+Program-Id:  callee1                     IF                              Line:      9
+Program-Id:  callee1                     CONTINUE                        Line:     12
+Program-Id:  callee1                     EVALUATE                        Line:     14
+Program-Id:  callee1                     WHEN                            Line:     15
+Program-Id:  callee1                     WHEN                            Line:     18
+Program-Id:  callee1                     CONTINUE                        Line:     21
+Program-Id:  callee1                     EVALUATE                        Line:     23
+Program-Id:  callee1                     WHEN                            Line:     24
+Program-Id:  callee1                     WHEN                            Line:     27
+Program-Id:  callee1                     CONTINUE                        Line:     30
+Program-Id:  callee1                     CALL                            Line:     32
+Program-Id:  callee1                     CANCEL                          Line:     33
+Program-Id:  callee1                     CALL                            Line:     33
 Source: 'preload.cob'
-Program-Id: callee2b
-Program-Id: callee2b             Entry: callee2b                        Line:      4
-Program-Id: callee2b           Section: SOME-SEC                        Line:      5
-Program-Id: callee2b         Paragraph: SOME-PAR                        Line:      6
-Program-Id: callee2b           Section: OTHER-SEC                       Line:     12
-Program-Id: callee2b         Paragraph: EX                              Line:     14
-Program-Id: callee2b             Entry: LEAVE-ME                        Line:     14
-Program-Id: callee2b         Paragraph: END-PAR                         Line:     10
-Program-Id: callee2b              Exit: callee2b                        Line:     10
+Program-Id:  callee2b
+Program-Id:  callee2b             Entry: callee2b                        Line:      4
+Program-Id:  callee2b           Section: SOME-SEC                        Line:      5
+Program-Id:  callee2b         Paragraph: SOME-PAR                        Line:      6
+Program-Id:  callee2b           Section: OTHER-SEC                       Line:     12
+Program-Id:  callee2b         Paragraph: EX                              Line:     14
+Program-Id:  callee2b             Entry: LEAVE-ME                        Line:     14
+Program-Id:  callee2b         Paragraph: END-PAR                         Line:     10
+Program-Id:  callee2b              Exit: callee2b                        Line:     10
 Source: 'callee1.cob'
-Program-Id: callee1
-Program-Id: callee1                     CANCEL                          Line:     33
-Program-Id: callee1                     SUBTRACT                        Line:     34
-Program-Id: callee1                     EXIT PROGRAM                    Line:     35
-Program-Id: callee1               Exit: callee1                         Line:     35
+Program-Id:  callee1
+Program-Id:  callee1                     CANCEL                          Line:     33
+Program-Id:  callee1                     SUBTRACT                        Line:     34
+Program-Id:  callee1                     EXIT PROGRAM                    Line:     35
+Program-Id:  callee1               Exit: callee1                         Line:     35
 Source: 'caller.cob'
-Program-Id: caller
-Program-Id: caller                      CANCEL                          Line:     16
-Program-Id: caller                      CALL                            Line:     17
+Program-Id:  caller
+Program-Id:  caller                      CANCEL                          Line:     24
+Program-Id:  caller                      CALL                            Line:     25
 Source: 'preload2.cob'
-Program-Id: callrec
-Program-Id: callrec              Entry: callrec                         Line:      9
-Program-Id: callrec            Section: SOME-SEC                        Line:     10
-Program-Id: callrec                     IF                              Line:     11
-Program-Id: callrec                     SET                             Line:     12
-Program-Id: callrec                     CALL                            Line:     13
-Program-Id: callrec              Entry: callrec                         Line:      9
-Program-Id: callrec            Section: SOME-SEC                        Line:     10
-Program-Id: callrec                     IF                              Line:     11
-Program-Id: callrec                     GOBACK                          Line:     15
-Program-Id: callrec               Exit: callrec                         Line:     15
-Program-Id: callrec                     GOBACK                          Line:     15
-Program-Id: callrec               Exit: callrec                         Line:     15
+Program-Id:  callrec
+Program-Id:  callrec              Entry: callrec                         Line:      9
+Program-Id:  callrec            Section: SOME-SEC                        Line:     10
+Program-Id:  callrec                     IF                              Line:     11
+Program-Id:  callrec                     SET                             Line:     12
+Program-Id:  callrec                     CALL                            Line:     13
+Program-Id:  callrec              Entry: callrec                         Line:      9
+Program-Id:  callrec            Section: SOME-SEC                        Line:     10
+Program-Id:  callrec                     IF                              Line:     11
+Program-Id:  callrec                     GOBACK                          Line:     35
+Program-Id:  callrec               Exit: callrec                         Line:     35
+Program-Id:  callrec                     MOVE                            Line:     15
+Program-Id:  callrec                     PERFORM                         Line:     17
+Program-Id:  callrec                     UNTIL                           Line:     17
+Program-Id:  callrec                     PERFORM                         Line:     20
+Program-Id:  callrec                     PERFORM                         Line:     23
+Program-Id:  callrec                     COMPUTE                         Line:     24
+Program-Id:  callrec                     COMPUTE                         Line:     24
+Program-Id:  callrec                     UNTIL                           Line:     21
+Program-Id:  callrec                     UNTIL                           Line:     17
+Program-Id:  callrec                     INITIALIZE                      Line:     29
+Program-Id:  callrec                     SET                             Line:     29
+Program-Id:  callrec                     MOVE                            Line:     31
+Program-Id:  callrec                     MOVE                            Line:     31
+Program-Id:  callrec                     SET                             Line:     32
+Program-Id:  callrec                     GOBACK                          Line:     35
+Program-Id:  callrec               Exit: callrec                         Line:     35
 Source: 'caller.cob'
-Program-Id: caller
-Program-Id: caller                      MOVE                            Line:     18
-Program-Id: caller                      STOP RUN                        Line:     19
+Program-Id:  caller
+Program-Id:  caller                      MOVE                            Line:     26
+Program-Id:  caller                      SEARCH ALL                      Line:     28
+Program-Id:  caller                      ADD                             Line:     30
+Program-Id:  caller                      SET                             Line:     31
+Program-Id:  caller                      MOVE                            Line:     32
+Program-Id:  caller                      SEARCH                          Line:     37
+Program-Id:  caller                      WHEN                            Line:     40
+Program-Id:  caller                      ADD                             Line:     41
+Program-Id:  caller                      SET                             Line:     42
+Program-Id:  caller                      MOVE                            Line:     43
+Program-Id:  caller                      SEARCH                          Line:     46
+Program-Id:  caller                      WHEN                            Line:     52
+Program-Id:  caller                      ADD                             Line:     49
+Program-Id:  caller                      SET                             Line:     50
+Program-Id:  caller                      MOVE                            Line:     51
+Program-Id:  caller                      SEARCH ALL                      Line:     55
+Program-Id:  caller                      CONTINUE                        Line:     59
+Program-Id:  caller                      STOP RUN                        Line:     62
 ])
 
 AT_CLEANUP
 
 
 AT_SETUP([stack and dump feature])
-#AT_KEYWORDS([Dump])
+AT_KEYWORDS([stacktrace configuration COB_STACKTRACE COB_DUMP_FILE])
 
-AT_DATA([./cpyabrt], [
+AT_DATA([cpyabrt], [
             MOVE "Quick brown fox jumped over the dog"
               TO TSTTAILX (1:40).
             MOVE CM-COMPANY TO TSTTAILX (42:20).
@@ -7097,7 +7940,7 @@ AT_DATA([prog.cob], [
             MOVE "Quick brown fox jumped over the dog"
               TO TSTLONG, TSTLONG (50:36).
             MOVE "Quicker grey fox jumped the cougar"
-              TO TSTHEX (1:35).
+              TO TSTHEX (1:35). PERFORM MAIN-2.
        MAIN-2.
             MOVE 17 TO HEXV.
             MOVE HEXC TO TSTHEX (39:1).
@@ -7164,14 +8007,14 @@ AT_DATA([sub2.cob], [
        77  DYNAMIC-NUM            PICTURE 9(4).
 
        PROCEDURE DIVISION USING X, TSPFL-RECORD.
-
+       SubwaY SECTION.
            IF ADDRESS OF BASED-RECORD = NULL
               ALLOCATE BASED-RECORD INITIALIZED
            ELSE
               SET ADDRESS OF DYNAMIC-NUM TO ADDRESS OF BASED-RECORD
               ADD 1 TO B-NUM
-           END-IF
-
+           END-IF.
+       DO-CALL.
            IF X = 5440
                CALL "sub1" USING X, OMITTED.
            MOVE ALL "X" TO TSTREC.
@@ -7226,9 +8069,17 @@ X is 000005441
 [libcob: cpyabrt:4: error: LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 libcob: cpyabrt:4: warning: implicit CLOSE of FLATFILE ('RELFIX')
 
- Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
- Last statement of "prog" was at line 118 of prog.cob
+ Last statement of "sub1" was MOVE
+	MAIN-2 OF MAIN-1 at cpyabrt:4
+	MAIN-1 at prog.cob:177
+	ENTRY sub1 at prog.cob:158
+ Last statement of "sub2" was CALL
+	DO-CALL OF SubwaY at sub2.cob:48
+	ENTRY sub2 at sub2.cob:38
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:118
+	MAIN-100 at prog.cob:85
+	ENTRY prog at prog.cob:75
  Started by ./prog
 ])
 
@@ -7243,9 +8094,17 @@ X is 000005441
 [libcob: cpyabrt:4: error: LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 libcob: cpyabrt:4: warning: implicit CLOSE of FLATFILE ('RELFIX')
 
- Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
- Last statement of "prog" was at line 118 of prog.cob
+ Last statement of "sub1" was MOVE
+	MAIN-2 OF MAIN-1 at cpyabrt:4
+	MAIN-1 at prog.cob:177
+	ENTRY sub1 at prog.cob:158
+ Last statement of "sub2" was CALL
+	DO-CALL OF SubwaY at sub2.cob:48
+	ENTRY sub2 at sub2.cob:38
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:118
+	MAIN-100 at prog.cob:85
+	ENTRY prog at prog.cob:75
  Started by ./prog
 ])
 
@@ -7274,9 +8133,17 @@ libcob: cpyabrt:4: warning: implicit CLOSE of FLATFILE ('RELFIX')
 AT_DATA([reference], [
 Module dump due to LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 
- Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
- Last statement of "prog" was at line 118 of prog.cob
+ Last statement of "sub1" was MOVE
+	MAIN-2 OF MAIN-1 at cpyabrt:4
+	MAIN-1 at prog.cob:177
+	ENTRY sub1 at prog.cob:158
+ Last statement of "sub2" was CALL
+	DO-CALL OF SubwaY at sub2.cob:48
+	ENTRY sub2 at sub2.cob:38
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:118
+	MAIN-100 at prog.cob:85
+	ENTRY prog at prog.cob:75
  Started by prog
 
 Dump Program-Id sub1 from prog.cob compiled MMM DD YYYY HH:MM:SS
@@ -7482,9 +8349,17 @@ X is 000005441
 [libcob: cpyabrt:4: error: LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 libcob: cpyabrt:4: warning: implicit CLOSE of FLATFILE ('RELFIX')
 
- Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
- Last statement of "prog" was at line 118 of prog.cob
+ Last statement of "sub1" was MOVE
+	MAIN-2 OF MAIN-1 at cpyabrt:4
+	MAIN-1 at prog.cob:177
+	ENTRY sub1 at prog.cob:158
+ Last statement of "sub2" was CALL
+	DO-CALL OF SubwaY at sub2.cob:48
+	ENTRY sub2 at sub2.cob:38
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:118
+	MAIN-100 at prog.cob:85
+	ENTRY prog at prog.cob:75
  Started by prog
 
 dump written to tstdump.dump
@@ -7511,9 +8386,17 @@ AT_CAPTURE_FILE(./tstdump_fdls.dump)
 AT_DATA([reference_fdls_tmpl], [
 Module dump due to LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 
- Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
- Last statement of "prog" was at line 118 of prog.cob
+ Last statement of "sub1" was MOVE
+	MAIN-2 OF MAIN-1 at cpyabrt:4
+	MAIN-1 at prog.cob:177
+	ENTRY sub1 at prog.cob:158
+ Last statement of "sub2" was CALL
+	DO-CALL OF SubwaY at sub2.cob:48
+	ENTRY sub2 at sub2.cob:38
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:118
+	MAIN-100 at prog.cob:85
+	ENTRY prog at prog.cob:75
  Started by ./prog_fdls
 
 Dump Program-Id sub1 from prog.cob compiled MMM DD YYYY HH:MM:SS
@@ -7595,9 +8478,17 @@ AT_CHECK([gcdiff -I'Started by' -U reference_fdls_tmpl tstdump_allfdls.dump], [0
 #AT_DATA([reference_ls_sticky_tmpl], [
 #Module dump due to LINKAGE item 'TSPFL-RECORD' (accessed by 'CM-COMPANY') not passed by caller
 #
-# Last statement of "sub1" was at line 4 of cpyabrt
- Last statement of "sub2" was at line 48 of sub2.cob
-# Last statement of "prog" was at line 118 of prog.cob
+# Last statement of "sub1" was MOVE
+#	MAIN-2 OF MAIN-1 at cpyabrt:4
+#	MAIN-1 at prog.cob:177
+#	ENTRY sub1 at prog.cob:158
+# Last statement of "sub2" was CALL
+#	DO-CALL OF SubwaY at sub2.cob:48
+#	ENTRY sub2 at sub2.cob:38
+# Last statement of "prog" was CALL
+#	CALL-IT-OMIT at prog.cob:118
+#	MAIN-100 at prog.cob:85
+#	ENTRY prog at prog.cob:75
 # Started by ./prog_ls_sticky
 #
 #Dump Program-Id sub1 from prog.cob compiled MMM DD YYYY HH:MM:SS
@@ -7634,7 +8525,7 @@ AT_CLEANUP
 
 
 AT_SETUP([dump feature with NULL address])
-#AT_KEYWORDS([Dump])
+AT_KEYWORDS([stack stacktrace])
 
 AT_DATA([prog.cob], [
        IDENTIFICATION   DIVISION.
@@ -7760,11 +8651,12 @@ AT_CAPTURE_FILE(./dumpall.txt)
 AT_DATA([reference], [
 Module dump due to BASED/LINKAGE item 'A-TABLE' has NULL address
 
- Last statement of "prog" was at line 102 of prog.cob
+ Last statement of "prog" was MOVE at line 102 of prog.cob
+	ENTRY prog at prog.cob:74
  Started by ./prog
-            param 1
-            param
-            param 3
+	param 1
+	param
+	param 3
 
 Dump Program-Id prog from prog.cob compiled MMM DD YYYY HH:MM:SS
 
@@ -8292,7 +9184,7 @@ AT_DATA([prog.cob], [
        END PROGRAM sub2.
 ])
 
-AT_CHECK([$COMPILE -debug -fdump=ALL prog.cob ], [0], [], [])
+AT_CHECK([$COBC -x -debug -fdump=ALL prog.cob ], [0], [], [])
 
 AT_CHECK([COB_DUMP_FILE=dumpall.txt \
 $COBCRUN_DIRECT ./prog], [11], [sub1: X is 000000001 RECORD:Peek a boo!.
@@ -8312,8 +9204,12 @@ AT_CAPTURE_FILE(./dumpall.txt)
 AT_DATA([reference], [
 Module dump due to signal SIGSEGV
 
- Last statement of "sub2" was at line 3 of cpyabrt
- Last statement of "prog" was at line 135 of prog.cob
+ Last statement of "sub2" was MOVE at line 3 of cpyabrt
+	ENTRY sub2 at prog.cob:237
+ Last statement of "prog" was CALL
+	CALL-IT-OMIT at prog.cob:135
+	MAIN-100 at prog.cob:99
+	ENTRY prog at prog.cob:89
  Started by ./prog
 
 Dump Program-Id sub2 from prog.cob compiled MMM DD YYYY HH:MI:SS
@@ -8446,8 +9342,139 @@ AT_CHECK([gcdiff reference dumpall.txt], [0], [], [])
 
 AT_CLEANUP
 
+AT_SETUP([Test dump feature (5)])
+AT_KEYWORDS([Dump])
 
-AT_SETUP([C-API Test (param based)])
+AT_DATA([prog.cob], [       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+      
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+       DATA  DIVISION.
+       FILE SECTION.
+       WORKING-STORAGE SECTION.
+       77  UNUSED-VAR        VALUE  1          PICTURE 9(4).
+       01  BIN                      PIC 9(9) BINARY VALUE 0.
+       01  PACKD                    PIC 9(4)V99 COMP-3 VALUE 757.99.
+      
+       01  TSPFL-RECORD.
+           10  CM-CUST-NUM      PICTURE X(8)  VALUE "RON00001". 
+           10  CM-COMPANY       PICTURE X(25) VALUE "IBS Canada". 
+           10  CM-DISK          PICTURE X(8)  VALUE "4TB". 
+           10  CM-NO-TERMINALS  USAGE FLOAT.
+      
+       PROCEDURE DIVISION.
+
+       MAIN-100.
+           MOVE 64.7 TO CM-NO-TERMINALS.
+            IF CM-NO-TERMINALS = 66
+                DISPLAY "What happened!"
+            END-IF.
+           PERFORM CALL-SUB-1.
+           STOP RUN.
+
+       CALL-SUB-1 SECTION.
+           CALL "sub1" USING bin, TSPFL-RECORD.
+       
+           END PROGRAM prog.
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. sub1.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  BAD-PTR      USAGE POINTER.
+
+       LINKAGE SECTION.
+       01  X          PIC 9 ANY NUMERIC.
+       01  TSP-RECORD.
+           10  CM-CUST-NUM                     PICTURE X(8). 
+           10  CM-COMPANY                      PICTURE X(25). 
+           10  CM-DISK                         PICTURE X(8). 
+           10  CM-NO-TERMINALS                 USAGE FLOAT.
+       
+       PROCEDURE DIVISION USING X, TSP-RECORD.
+       MAIN-1 SECTION.
+            PERFORM DMP-TIME.
+            IF CM-NO-TERMINALS = 66
+                DISPLAY X "Miller time!"
+            END-IF.
+            GOBACK.
+       DMP-TIME1.
+            CALL BAD-PTR.
+       DMP-TIME.
+            PERFORM DMP-TIME1.
+       END PROGRAM sub1.
+])
+
+AT_CHECK([$COMPILE -std=default -debug -fdump=ALL prog.cob ], [0], [], [])
+
+AT_CHECK([export COB_DUMP_FILE=dumpall.txt
+$COBCRUN_DIRECT ./prog], [1], [], [libcob: prog.cob:58: error: module '' not found
+
+dump written to dumpall.txt
+])
+
+
+AT_CAPTURE_FILE(./dumpall.txt)
+
+AT_DATA([reference], [
+Module dump due to module '' not found
+
+ Last statement of "sub1" was CALL
+	DMP-TIME1 OF MAIN-1 at prog.cob:58
+	DMP-TIME OF MAIN-1 at prog.cob:60
+	MAIN-1 at prog.cob:52
+	ENTRY sub1 at prog.cob:50
+ Last statement of "prog" was CALL
+	CALL-SUB-1 at prog.cob:32
+	MAIN-100 at prog.cob:28
+	ENTRY prog at prog.cob:21
+ Started by ./prog
+
+Dump Program-Id sub1 from prog.cob compiled MMM DD YYYY HH:MI:SS
+
+WORKING-STORAGE
+**********************
+01        BAD-PTR                         0x0000000000000000
+
+LINKAGE
+**********************
+01        X                               000000000
+01        TSP-RECORD.
+     10   CM-CUST-NUM                    'RON00001'
+     10   CM-COMPANY                     'IBS Canada'
+     10   CM-DISK                        '4TB'
+     10   CM-NO-TERMINALS                 64.699997
+
+END OF DUMP - sub1
+**********************
+
+Dump Program-Id prog from prog.cob compiled MMM DD YYYY HH:MI:SS
+
+WORKING-STORAGE
+**********************
+77        UNUSED-VAR                      0001
+01        BIN                             000000000
+01        PACKD                           0757.99
+01        TSPFL-RECORD.
+     10   CM-CUST-NUM                    'RON00001'
+     10   CM-COMPANY                     'IBS Canada'
+     10   CM-DISK                        '4TB'
+     10   CM-NO-TERMINALS                 64.699997
+
+END OF DUMP - prog    
+**********************
+
+])
+
+AT_CHECK([gcdiff reference dumpall.txt], [0], [], [])
+
+AT_CLEANUP
+
+
+AT_SETUP([C-API (param based)])
 AT_KEYWORDS([CALL api])
 
 AT_DATA([prog.cob], [
@@ -8802,8 +9829,8 @@ libcob: prog.cob:84: warning: cob_put_s64_param: attempt to over-write constant 
 AT_CLEANUP
 
 
-AT_SETUP([C API Test (field based)])
-AT_KEYWORDS([CALL])
+AT_SETUP([C-API (field based)])
+AT_KEYWORDS([CALL api])
 
 AT_DATA([prog.cob], [
        IDENTIFICATION DIVISION.
@@ -9152,8 +10179,10 @@ libcob: prog.cob:84: warning: cob_put_field_str: attempt to over-write constant 
 
 AT_CLEANUP
 
-AT_SETUP([C API Test (2)])
-AT_KEYWORDS([CALL])
+
+# FIXME: better name
+AT_SETUP([C-API (3)])
+AT_KEYWORDS([CALL api])
 
 AT_DATA([prog.cob], [
        IDENTIFICATION DIVISION.
@@ -9480,6 +10509,136 @@ CSYMDMP with 0 parameters
                      THE-RECORD is Error: THE-RECORD is undefined.
                         BIN-FLD is 000000005. Was changed
 Ending now
+], [])
+
+AT_CLEANUP
+
+AT_SETUP([C API Test JUST])
+AT_KEYWORDS([CALL])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  CHRX        PIC  X(10) JUST RIGHT VALUE 'Hello'.
+
+       PROCEDURE DIVISION.
+           DISPLAY "Initial: '" CHRX "'".
+           CALL "CAPI" USING CHRX.
+           DISPLAY "  After: '" CHRX "'".
+           STOP RUN.
+])
+
+AT_DATA([cmod.c], [[
+#include <stdio.h>
+#include <string.h>
+#include <libcob.h>
+
+static char *
+getType(int type, int byvalue)
+{
+   static char wrk[24];
+   switch (type) {
+   case COB_TYPE_GROUP:    return "Group";
+   case COB_TYPE_NUMERIC_COMP5:  return byvalue==2?"COMP-4":"COMP-5";
+   case COB_TYPE_NUMERIC_BINARY: return "COMP-4";
+   case COB_TYPE_NUMERIC_PACKED: return "COMP-3";
+   case COB_TYPE_NUMERIC_FLOAT:  return "COMP-1";
+   case COB_TYPE_NUMERIC_DOUBLE: return "COMP-2";
+   case COB_TYPE_NUMERIC_DISPLAY:   return "DISPLAY";
+   case COB_TYPE_ALPHANUMERIC:   return "X";
+   case COB_TYPE_NUMERIC_EDITED: return "EDITED";
+   }
+   sprintf(wrk,"Type %04X",type);
+   return wrk;
+}
+
+int
+CAPI(void *p1, ...)
+{
+   int      k,nargs,type,digits,scale,size,sign,byvalue,isright;
+   cob_s64_t   val;
+   char     *str, wrk[80],pic[24];
+
+   nargs = cob_get_num_params();
+   if ((k = cob_get_name_line (wrk, NULL)) > 0) {
+      printf("Line%3d: ",k);
+   }
+   printf("CALL with %d parameters\n",nargs);
+   for(k=1; k <= nargs; k++) {
+      type   = cob_get_param_type (k);
+      digits = cob_get_param_digits (k);
+      scale  = cob_get_param_scale (k);
+      size   = cob_get_param_size (k);
+      sign   = cob_get_param_sign (k);
+      byvalue = cob_get_param_constant(k);
+      isright = cob_get_param_right(k);
+      printf("     P%d: %-8s ",k,getType(type,byvalue));
+      if (byvalue == 3)
+         printf("BY CONTENT   ");
+      else if (byvalue == 2)
+         printf("BY VALUE     ");
+      else if (byvalue == 1)
+         printf("LITERAL      ");
+      else
+         printf("BY REFERENCE ");
+      if (type == COB_TYPE_ALPHANUMERIC) {
+         sprintf(pic,"X(%d)",size);
+         str = cob_get_picx_param (k, NULL, 0);
+         printf("%-11s '%.*s'%s",pic,size,str,isright?" RIGHT":"");
+         cob_free ((void*)str);
+         cob_put_picx_param (k, "Bye!");
+      } else if (type == COB_TYPE_GROUP) {
+         sprintf(pic,"(%d)",size);
+         str = cob_get_grp_param (k, NULL, 0);
+         printf("%-11s '%s'",pic,str);
+         cob_free ((void*)str);
+         memset(wrk,' ',sizeof(wrk));
+         memcpy(wrk,"Bye-Bye Birdie!",15);
+         cob_put_grp_param (k, wrk, sizeof(wrk));
+         str = cob_get_grp_param (k, NULL, 0);
+         printf(" --> '%.*s'",size,str);
+         cob_free ((void*)str);
+      } else if (type == COB_TYPE_NUMERIC_EDITED) {
+         if(scale > 0) {
+            sprintf(pic,"%s9(%d)V9(%d)",sign?"S":"",digits-scale,scale);
+         } else {
+            sprintf(pic,"%s9(%d)",sign?"S":"",digits-scale);
+         }
+         val = cob_get_s64_param (k);
+         printf("%-11s %lld ",pic,val);
+         val = val + 130;
+         val = -val;
+         cob_put_s64_param (k, val);
+         cob_get_grp_param (k, wrk, sizeof(wrk));
+         printf(" to %.*s",size,wrk);
+      } else {
+         if(scale > 0) {
+            sprintf(pic,"%s9(%d)V9(%d)",sign?"S":"",digits-scale,scale);
+         } else {
+            sprintf(pic,"%s9(%d)",sign?"S":"",digits-scale);
+         }
+         val = cob_get_s64_param (k);
+         printf("%-11s %lld",pic,val);
+         cob_put_s64_param (k, val + 3);
+      }
+      printf(";\n");
+      fflush(stdout);
+   }
+   if (nargs > 2)
+      cob_put_s64_param (7, val + 3);
+   return 0;
+}
+]])
+
+AT_CHECK([$COMPILE -x -std=mf -debug -Wall -debug prog.cob cmod.c ], [0], [], [])
+
+AT_CHECK([$COBCRUN_DIRECT ./prog], [0], [Initial: 'Hello     '
+Line 11: CALL with 1 parameters
+     P1: X        BY REFERENCE X(10)       'Hello' RIGHT;
+  After: '      Bye!'
 ], [])
 
 AT_CLEANUP
@@ -10995,7 +12154,7 @@ AT_CLEANUP
 
 
 AT_SETUP([FLOAT-DECIMAL w/o SIZE ERROR])
-AT_KEYWORDS([Numeric runmisc
+AT_KEYWORDS([Numeric runmisc overflow
 FLOAT-DECIMAL-16 FLOAT-DECIMAL-34
 DISPLAY COMPUTE])
 
@@ -11169,7 +12328,7 @@ AT_CLEANUP
 
 
 AT_SETUP([FLOAT-SHORT / FLOAT-LONG w/o SIZE ERROR])
-AT_KEYWORDS([Numeric runmisc
+AT_KEYWORDS([Numeric runmisc overflow
 COMP-1 COMP-2
 DISPLAY COMPUTE])
 
@@ -11368,7 +12527,7 @@ AT_CLEANUP
 
 
 AT_SETUP([FLOAT-SHORT with SIZE ERROR])
-AT_KEYWORDS([COMP-1])
+AT_KEYWORDS([COMP-1 overflow])
 
 AT_DATA([prog.cob], [
        identification division.
@@ -11419,7 +12578,7 @@ AT_CLEANUP
 
 
 AT_SETUP([FLOAT-LONG with SIZE ERROR])
-AT_KEYWORDS([COMP-2])
+AT_KEYWORDS([COMP-2 overflow])
 
 AT_DATA([prog.cob], [
        identification division.
@@ -11469,7 +12628,8 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE prog.cob], [0], [], [])
-# note: the actual value is not checked as this depends on intermediate rounding
+# note: the actual value is not checked as it depends on non-portable
+#       intermediate rounding
 AT_CHECK([$COBCRUN_DIRECT ./prog], [0], ignore, [SIZE ERROR raised])
 
 AT_CLEANUP

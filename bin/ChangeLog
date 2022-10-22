@@ -1,4 +1,21 @@
 
+2022-10-18  Simon Sobisch <simonsobisch@gnu.org>
+
+	* cobcrun.c: minor validation - check for empty parameters
+
+2022-10-13  Simon Sobisch <simonsobisch@gnu.org>
+
+	* cobfile.c: fixed compiler warnings -Wunused-result
+	* cobfile.c: handle --quiet to output less progress info
+
+2022-06-28  Simon Sobisch <simonsobisch@gnu.org>
+
+	* cobcrun.c: added -dumpversion (called from libcob)
+
+2022-01-03  Simon Sobisch <simonsobisch@gnu.org>
+
+	* cobcrun.c: include libcob headers relative and tarstamp.h early
+
 2021-05-27  Simon Sobisch <simonsobisch@gnu.org>
 
 	* cobcrun.c: use double-dash for long options
@@ -306,7 +323,7 @@
 	  then you can switch easily.
 
 
-Copyright 2004-2008,2010,2012,2014-2021 Free Software Foundation, Inc.
+Copyright 2004-2008,2010,2012,2014-2022 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification, are
 permitted provided the copyright notice and this notice are preserved.

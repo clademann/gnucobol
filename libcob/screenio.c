@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart, Christian Lademann
 
    This file is part of GnuCOBOL.
@@ -66,7 +66,7 @@
 
 /* Force symbol exports */
 #define	COB_LIB_EXPIMP
-#include "libcob.h"
+#include "common.h"
 #include "coblocal.h"
 
 #ifdef	HAVE_CURSES_FREEALL
@@ -88,6 +88,11 @@ struct cob_inp_struct {
 	size_t			down_index;
 	int			this_y;
 	int			this_x;
+};
+
+enum screen_statement {
+	ACCEPT_STATEMENT,
+	DISPLAY_STATEMENT
 };
 
 #define	COB_INP_FLD_MAX		512U
@@ -115,7 +120,7 @@ static int			global_return;
 static int			cob_current_y;
 static int			cob_current_x;
 static short			fore_color	/* "const" default foreground (pair 0 on init) */;
-static short			back_color	/* "const" default background (pair 0 on init) */;;
+static short			back_color	/* "const" default background (pair 0 on init) */;
 static int			origin_y;
 static int			origin_x;
 static int			display_cursor_y;
@@ -132,11 +137,10 @@ static int	curr_setting_mouse_flags = INT_MAX;
 #endif
 #endif
 
-/* Local function prototypes when screenio activated */
 
-#ifdef	WITH_EXTENDED_SCREENIO
-static void cob_screen_init	(void);
-#endif
+/* Local function prototypes */
+
+static int cob_screen_init	(void);
 
 #ifdef	WITH_EXTENDED_ACCDIS
 #include "xad.h"
@@ -196,11 +200,85 @@ init_cob_screen_if_needed (void)
 	if (!cobglobptr) {
 		cob_fatal_error (COB_FERROR_INITIALIZED);
 	}
-#ifdef	WITH_EXTENDED_SCREENIO
 	if (!cobglobptr->cob_screen_initialized) {
-		cob_screen_init ();
+		int ret = cob_screen_init ();
+		if (ret) {
+			/* possibly adjust all callers to raise an exception */
+			cob_hard_failure ();
+		}
 	}
-#endif
+}
+
+static void
+cob_set_crt3_status (cob_field *status_field, int fret)
+{
+	unsigned char	crtstat[3];
+
+	crtstat[0] = '0';
+	crtstat[1] = '\0';
+	crtstat[2] = '\0';
+
+	switch (fret) {
+	case 0:	/* OK */
+		crtstat[0] = '0';
+		crtstat[1] = '0';
+		break;
+
+	case 2005:	/* ESC */
+		crtstat[0] = '1';
+		crtstat[1] = '\0';
+		break;
+
+	case 8000:	/* NO_FIELD */
+	case 9001:	/* MAX_FIELD */
+		crtstat[0] = '9';
+		crtstat[1] = '\0';
+		break;
+
+	case 8001:	/* TIMEOUT, CHECKME */
+		crtstat[0] = '9';
+		crtstat[1] = '\1';
+		break;
+
+	/* TODO: more case COB_SCR_... */
+
+	default:
+		if (fret >= 1001 && fret <= 1064) {
+			/* function keys */
+			crtstat[0] = '1';
+			crtstat[1] = (unsigned char)(fret - 1000);
+		} else if (fret >= 2001 && fret <= 2110) {
+			/* exception keys */
+			crtstat[0] = '2';
+			crtstat[1] = (unsigned char)(fret - 2000);
+		}
+	}
+
+	memcpy (status_field->data, crtstat, 3);
+}
+
+static void
+handle_status (const int fret, const enum screen_statement stmt)
+{
+	if (fret) {
+		cob_set_exception (stmt == ACCEPT_STATEMENT ?
+			COB_EC_IMP_ACCEPT : COB_EC_IMP_DISPLAY);
+	}
+	COB_ACCEPT_STATUS = fret;
+
+	if (COB_MODULE_PTR && COB_MODULE_PTR->crt_status) {
+		cob_field	*status_field = COB_MODULE_PTR->crt_status;
+		if (COB_FIELD_IS_NUMERIC (status_field)) {
+			cob_set_int (status_field, fret);
+		} else if (status_field->size == 3) {
+			cob_set_crt3_status (status_field, fret);
+		} else {
+			char	buff[23]; /* 10: make the compiler happy as "int" *could*
+						         have more digits than we "assume" */
+			sprintf (buff, "%4.4d", fret);
+			memcpy (status_field->data, buff, 4U);
+		}
+	}
 }
 
 #ifdef	WITH_EXTENDED_SCREENIO
@@ -256,6 +334,7 @@ cob_set_cursor_pos (int line, int column)
 	(void) move (line, column);
 }
 
+#if 0 /* currently unused */
 static void
 cob_move_to_beg_of_last_line (void)
 {
@@ -268,6 +347,7 @@ cob_move_to_beg_of_last_line (void)
 
 	COB_UNUSED (max_x);
 }
+#endif
 
 static short
 cob_to_curses_color (cob_field *f, const short default_color)
@@ -349,11 +429,6 @@ cob_activate_color_pair (const short color_pair_number)
 
 	return ret;
 }
-
-enum screen_statement {
-	ACCEPT_STATEMENT,
-	DISPLAY_STATEMENT
-};
 
 static void
 cob_screen_attr (cob_field *fgc, cob_field *bgc, const cob_flags_t attr,
@@ -440,11 +515,11 @@ cob_screen_attr (cob_field *fgc, cob_field *bgc, const cob_flags_t attr,
 	}
 }
 
-static void
+static int
 cob_screen_init (void)
 {
 	if (cobglobptr->cob_screen_initialized) {
-		return;
+		return 0;
 	}
 
 	cob_base_inp = NULL;
@@ -495,8 +570,7 @@ cob_screen_init (void)
 
 	if (!initscr ()) {
 		cob_runtime_error (_("failed to initialize curses"));
-		/* FIXME: likely should raise an exception instead */
-		cob_stop_run (1);
+		return 1;
 	}
 	cobglobptr->cob_screen_initialized = 1;
 #ifdef	HAVE_USE_LEGACY_CODING
@@ -1191,12 +1265,12 @@ get_size (cob_screen *s)
 
 }
 static void
-get_screen_item_line_and_col (cob_screen * s, int * const line,
+get_screen_item_line_and_col (cob_screen *s, int * const line,
 			      int * const col)
 {
 	int		found_line = 0;
 	int		found_col = 0;
-	int	        is_screen_to_display = 1;
+	int		is_screen_to_display = 1;
 	int		is_elementary;
 
 	*line = 0;
@@ -1227,7 +1301,7 @@ get_screen_item_line_and_col (cob_screen * s, int * const line,
 			}
 			
 			if (!found_col && !s->column && is_elementary
-			    && !is_first_screen_item (s)) {
+			 && !is_first_screen_item (s)) {
 				/*
 				  Note that group items are excluded; the
 				  standard assumes COL + 1, unless otherwise
@@ -1239,7 +1313,7 @@ get_screen_item_line_and_col (cob_screen * s, int * const line,
 			}
 		}
 
-	        is_screen_to_display = 0;
+		is_screen_to_display = 0;
 	}
 
 	*line += origin_y;
@@ -2307,13 +2381,9 @@ cob_screen_get_all (const int initial_curs, const int accept_timeout)
 
 			/* Handle UPPER/LOWER. */
 			if (s->attr & COB_SCREEN_UPPER) {
-				if (islower (keyp)) {
-					keyp = toupper (keyp);
-				}
+				keyp = toupper ((unsigned char)keyp);
 			} else if (s->attr & COB_SCREEN_LOWER) {
-				if (isupper (keyp)) {
-					keyp = tolower (keyp);
-				}
+				keyp = tolower ((unsigned char)keyp);
 			}
 
 			if (COB_INSERT_MODE) {
@@ -2701,7 +2771,6 @@ static void
 screen_display (cob_screen *s, const int line, const int column)
 {
 	int		status;
-	init_cob_screen_if_needed ();
 
 	origin_y = line;
 	origin_x = column;
@@ -2760,14 +2829,14 @@ screen_accept (cob_screen *s, const int line, const int column,
 	/* Prepare input fields */
 	if (cob_prep_input (s)) {
 		pass_cursor_to_program ();
-		handle_status (COB_SCR_MAX_FIELD);
+		handle_status (COB_SCR_MAX_FIELD, ACCEPT_STATEMENT);
 		return;
 	}
 
 	/* No input field is an error */
 	if (!totl_index) {
 		pass_cursor_to_program ();
-		handle_status (COB_SCR_NO_FIELD);
+		handle_status (COB_SCR_NO_FIELD, ACCEPT_STATEMENT);
 		return;
 	}
 
@@ -2816,7 +2885,7 @@ screen_accept (cob_screen *s, const int line, const int column,
 	}
 	cob_screen_get_all (initial_curs, accept_timeout);
 	pass_cursor_to_program ();
-	handle_status (global_return);
+	handle_status (global_return, ACCEPT_STATEMENT);
 }
 
 static void
@@ -2829,21 +2898,30 @@ field_display (cob_field *f, const int line, const int column, cob_field *fgc,
 	int	size_display, fsize;
 	int	status;
 	char	fig_const;	/* figurative constant character */
+	cob_field	char_temp;
+	unsigned char	space_buff[4];
 
 	cob_flags_t	sattr = fattr;
 	cob_field	*sfgc = NULL;
 	cob_field	*sbgc = NULL;
 
 	/* LCOV_EXCL_START */
-	if (!f) {
-		cob_fatal_error(COB_FERROR_CODEGEN);
+	if (f) {
+		fsize = (int)f->size;
+	} else {
+		strcpy ((char*)space_buff, " ");
+		char_temp.data = space_buff;
+		char_temp.attr = &const_alpha_attr;
+		char_temp.size = 0;
+		f = &char_temp;
+		fsize = 0;
+		size_is = NULL;
 	}
 	/* LCOV_EXCL_STOP */
 
 	origin_y = 0;
 	origin_x = 0;
 
-	fsize = (int)f->size;
 	if (size_is) {
 		size_display = (unsigned int)cob_get_int (size_is);
 		/* SIZE ZERO is ignored */
@@ -2889,7 +2967,7 @@ field_display (cob_field *f, const int line, const int column, cob_field *fgc,
 	if (!(sattr & COB_SCREEN_NO_DISP)) {
 		/* figurative constant and WITH SIZE repeats the literal */
 		if (size_is
-		    && f->attr->type == COB_TYPE_ALPHANUMERIC_ALL) {
+		 && f->attr->type == COB_TYPE_ALPHANUMERIC_ALL) {
 			if ((int)f->size == 1) {
 				fig_const = f->data[0];
 				cob_addnch (size_display, fig_const);
@@ -3523,13 +3601,9 @@ field_accept (cob_field *f, const int sline, const int scolumn, cob_field *fgc,
 
 			/* Handle UPPER/LOWER. */
 			if (fattr & COB_SCREEN_UPPER) {
-				if (islower (keyp)) {
-					keyp = toupper (keyp);
-				}
+				keyp = toupper ((unsigned char)keyp);
 			} else if (fattr & COB_SCREEN_LOWER) {
-				if (isupper (keyp)) {
-					keyp = tolower (keyp);
-				}
+				keyp = tolower ((unsigned char)keyp);
 			}
 
 			/* Insert character, if requested. */
@@ -3606,7 +3680,7 @@ field_accept (cob_field *f, const int sline, const int scolumn, cob_field *fgc,
 	}
  field_return:
 	pass_cursor_to_program ();
-	handle_status (fret);
+	handle_status (fret, ACCEPT_STATEMENT);
 	if (f) {
 		cob_move (&temp_field, f);
 		cob_move_cursor (sline, right_pos + 1);
@@ -3651,6 +3725,7 @@ cob_screen_display (cob_screen *s, cob_field *line, cob_field *column,
 {
 	int	sline;
 	int	scolumn;
+	init_cob_screen_if_needed ();
 
 	extract_line_and_col_vals (line, column, DISPLAY_STATEMENT,
 				   zero_line_col_allowed, &sline, &scolumn);
@@ -3857,12 +3932,20 @@ cob_exit_screen (void)
 			field_accept_from_curpos (NULL, NULL, NULL, NULL, NULL, NULL, NULL, flags);
 		}
 		cobglobptr->cob_screen_initialized = 0;
+#if 0 /* CHECKME: Shouldn't be necessary */
 		clear ();
 		cob_move_to_beg_of_last_line ();
-		delwin (stdscr);
-		endwin ();
+#endif
+		endwin (); /* ends curses' terminal mode */
+		delwin (stdscr);	/* free storage related to screen not active */
 #ifdef	HAVE_CURSES_FREEALL
+		/* cleanup storage that would otherwise be shown
+		   to be "still reachable" with valgrind */
+ #if defined (NCURSES_VERSION)
 		_nc_freeall ();
+ #elif defined (__PDCURSES__)
+		PDC_free_memory_allocations ();
+ #endif
 #endif
 		if (cob_base_inp) {
 			cob_free (cob_base_inp);
@@ -3872,11 +3955,50 @@ cob_exit_screen (void)
 	COB_ACCEPT_STATUS = 0;
 }
 
+/* minimal exit from curses screen - without any cleanup */
+void
+cob_exit_screen_from_signal (int ss_only)
+{
+	/* note: we don't care about memory cleanup here, as this may
+	   lead to a lock or otherwise issues when our memory is broken
+	   (=explicit when coming from SIGSEGV / SIGBUS / SIGABRT fom libc) */
+
+	if (!cobglobptr) {
+		return;
+	}
+
+	/* warning: some implementations of curses are not safe to request
+	   exiting from curses mode! (ncurses >6 seems fine,
+	   PDCurses depending on availablity of PDC_free_memory_allocations) */
+#if (!defined (NCURSES_VERSION_MAJOR) || NCURSES_VERSION_MAJOR < 6) && \
+	 !defined (HAVE_PDC_FREE_MEMORY_ALLOCATIONS)
+	if (ss_only) return; 
+#endif
+
+	if (cobglobptr->cob_screen_initialized) {
+		endwin ();
+	}
+}
+
 #else	/* WITH_EXTENDED_SCREENIO */
+
+static int
+cob_screen_init (void)
+{
+	return -1;
+}
 
 void
 cob_exit_screen (void)
 {
+	/* nothing possible to do here */
+}
+
+void
+cob_exit_screen_from_signal (int signal_safe_only)
+{
+	/* nothing possible to do here */
+	COB_UNUSED (signal_safe_only);
 }
 
 void
@@ -3892,6 +4014,7 @@ cob_field_display (cob_field *f, cob_field *line, cob_field *column,
 	COB_UNUSED (fscroll);
 	COB_UNUSED (size_is);
 	COB_UNUSED (fattr);
+	handle_status (9000, DISPLAY_STATEMENT);
 }
 
 void
@@ -3900,6 +4023,7 @@ cob_field_accept (cob_field *f, cob_field *line, cob_field *column,
 		  cob_field *ftimeout, cob_field *prompt,
 		  cob_field *size_is, const cob_flags_t fattr)
 {
+	static int first_accept = 1;
 	COB_UNUSED (f);
 	COB_UNUSED (line);
 	COB_UNUSED (column);
@@ -3910,6 +4034,12 @@ cob_field_accept (cob_field *f, cob_field *line, cob_field *column,
 	COB_UNUSED (prompt);
 	COB_UNUSED (size_is);
 	COB_UNUSED (fattr);
+	if (first_accept) {
+		first_accept = 0;
+		cob_runtime_warning (_("runtime is not configured to support %s"),
+			"screenio ACCEPT");
+	}
+	handle_status (9000, ACCEPT_STATEMENT);
 }
 
 void
@@ -3920,6 +4050,7 @@ cob_screen_display (cob_screen *s, cob_field *line, cob_field *column,
 	COB_UNUSED (line);
 	COB_UNUSED (column);
 	COB_UNUSED (zero_line_col_allowed);
+	handle_status (9000, DISPLAY_STATEMENT);
 }
 
 void
@@ -3927,22 +4058,31 @@ cob_screen_accept (cob_screen *s, cob_field *line,
 		   cob_field *column, cob_field *ftimeout,
 		    const int zero_line_col_allowed)
 {
+	static int first_accept = 1;
 	COB_UNUSED (s);
 	COB_UNUSED (line);
 	COB_UNUSED (column);
 	COB_UNUSED (ftimeout);
 	COB_UNUSED (zero_line_col_allowed);
+	if (first_accept) {
+		first_accept = 0;
+		cob_runtime_warning (_("runtime is not configured to support %s"),
+			"screenio ACCEPT");
+	}
+	handle_status (9000, ACCEPT_STATEMENT);
 }
 
 void
 cob_screen_set_mode (const cob_u32_t smode)
 {
 	COB_UNUSED (smode);
+	/* TODO: raise exception */
 }
 
 int
 cob_sys_clear_screen (void)
 {
+	/* TODO: raise exception */
 	return 0;
 }
 
@@ -3966,6 +4106,7 @@ cob_screen_line_col (cob_field *f, const int l_or_c)
 	} else {
 		cob_set_int (f, 80);
 	}
+	/* TODO: _possibly_ raise exception */
 #endif
 }
 
@@ -3976,9 +4117,13 @@ cob_sys_sound_bell (void)
 		return 0;
 	}
 #ifdef	WITH_EXTENDED_SCREENIO
-	if (!cobglobptr->cob_screen_initialized &&
-	    COB_BEEP_VALUE != 2) {
-		cob_screen_init ();
+	if (!cobglobptr->cob_screen_initialized
+	 && COB_BEEP_VALUE != 2) {
+		int ret = cob_screen_init ();
+		if (ret) {
+			cob_speaker_beep ();
+			return ret;
+		}
 	}
 	cob_beep ();
 #else
@@ -4013,6 +4158,7 @@ cob_sys_get_csr_pos (unsigned char *fld)
 #else
 	fld[0] = 1U;
 	fld[1] = 1U;
+	/* TODO: _possibly- raise exception */
 #endif
 	return 0;
 }
@@ -4055,6 +4201,7 @@ cob_sys_get_char (unsigned char *fld)
 	}
 #else
 	COB_UNUSED (fld);
+	/* TODO: raise exception */
 #endif
 	return 0;
 }
@@ -4077,6 +4224,7 @@ cob_sys_set_csr_pos (unsigned char *fld)
 	return move (cline, ccol);
 #else
 	COB_UNUSED (fld);
+	/* TODO: raise exception */
 	return 0;
 #endif
 }
@@ -4094,6 +4242,7 @@ cob_sys_get_scr_phys_size (unsigned char *line, unsigned char *col)
 #else
 	*line = 24U;
 	*col = 80U;
+	/* TODO: _possibly_ raise exception */
 #endif
 	return 0;
 }
@@ -4105,6 +4254,7 @@ cob_get_scr_phys_cols (void)
 #ifdef	WITH_EXTENDED_SCREENIO
 	return (int)COLS;
 #else
+	/* TODO: _possibly_ raise exception */
 	return 80;
 #endif
 }
@@ -4116,6 +4266,7 @@ cob_get_scr_phys_lines (void)
 #ifdef	WITH_EXTENDED_SCREENIO
 	return (int)LINES;
 #else
+	/* TODO: _possibly_ raise exception */
 	return 24;
 #endif
 }

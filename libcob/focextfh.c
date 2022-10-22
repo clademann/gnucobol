@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -18,10 +18,11 @@
    along with GnuCOBOL.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* this file handles the obsolete OpenCOBOL external file handlers */
+/* this file handles the obsolete OpenCOBOL external file handlers,
+   it will go away in later versions of libcob if no explicit user
+   of this file handler is reported and on of those takes over the
+   maintanance for this file */
 
-/* Force symbol exports */
-#define	COB_LIB_EXPIMP
 #include "fileio.h"
 
 #if defined(WITH_INDEX_EXTFH) || defined(WITH_SEQRA_EXTFH)

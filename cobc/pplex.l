@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Dave Pitts
 
    This file is part of GnuCOBOL.
@@ -86,6 +86,10 @@ static int ppwrap (void) {
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <string.h>
+#ifdef	HAVE_STRINGS_H
+#include <strings.h>
+#endif
 
 #define	COB_IN_PPLEX	1
 #include "cobc.h"
@@ -223,9 +227,15 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 }
 
 ^[ ]*">>"[ ]?"DISPLAY"[ ]+ {
-	/* OpenCOBOL/GnuCOBOL 2.x extension: display message during compilation */
+	/* OpenCOBOL/GnuCOBOL 2.x extension, 202x: display message during compilation */
 	display_msg[0] = 0;
 	BEGIN DISPLAY_DIRECTIVE_STATE;
+}
+
+^[ ]*">>"[ ]?"REF-MOD-ZERO-LENGTH"	{
+	/* 202x: directive to allow zero ref-mod */
+	BEGIN ON_OFF_DIRECTIVE_STATE;
+	return REFMOD_DIRECTIVE;
 }
 
 ^[ ]*">>D"		{
@@ -367,8 +377,9 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 	BEGIN ELSE_DIRECTIVE_STATE;
 	return ELSE_DIRECTIVE;
 }
-^[ ]*"$END"		{
-	/* MF extension: conditional compilation */
+^[ ]*"$END"		|
+^[ ]*"$END-IF"	{
+	/* MF extension: conditional compilation, second undocumented */
 	BEGIN ENDIF_DIRECTIVE_STATE;
 	return ENDIF_DIRECTIVE;
 }
@@ -406,7 +417,7 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 	skip_to_eol ();
 }
 
-"COPY"			{
+"COPY"/[ ,;\n]			{
 	yy_push_state (COPY_STATE);
 	if (cb_src_list_file) {
 		get_new_listing_file ();
@@ -414,7 +425,7 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 	return COPY;
 }
 
-"INCLUDE"		{
+"INCLUDE"/[ ,;\n]		{
 	/* Note: ++INCLUDE/-INC (include only the data records,
 	   must be specified in column 8/1) and are not implemented yet */
 	yy_push_state (COPY_STATE);
@@ -424,7 +435,7 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 	return COPY;
 }
 
-"REPLACE"		{
+"REPLACE"/[ ,;\n]		{
 	yy_push_state (COPY_STATE);
 	return REPLACE;
 }
@@ -441,19 +452,19 @@ DEFNUM_LITERAL	[+-]?[0-9]*[\.]*[0-9]+
 	ppecho (yytext, 0, (int)yyleng);
 }
 
-"PROGRAM-ID"	{
+"PROGRAM-ID"/[ .,;\n]	{
 	/* Allow comment sentences/paragraphs */
 	comment_allowed = 1;
 	ppecho (yytext, 0, (int)yyleng);
 }
 
-"DIVISION"	{
+"DIVISION"/[ .,;\n]	{
 	/* Disallow comment sentences/paragraphs */
 	comment_allowed = 0;
 	ppecho (yytext, 0, (int)yyleng);
 }
 
-"SECTION"	{
+"SECTION"/[ .,;\n]	{
 	/* Disallow comment sentences/paragraphs */
 	comment_allowed = 0;
 	ppecho (yytext, 0, (int)yyleng);
@@ -668,6 +679,11 @@ COBOL_WORDS_DIRECTIVE_STATE>{
   }
   "ASSIGN"	{
 	return ASSIGN;
+/* not merged yet
+  }
+  "BOUND"	{
+	 return BOUND;
+*/
   }
   "CALLFH"	{
 	return CALLFH;
@@ -690,6 +706,12 @@ COBOL_WORDS_DIRECTIVE_STATE>{
   "MAKESYN" 	|
   "MAKE-SYN"	{
 	return MAKESYN;
+/* not merged yet
+  }
+  "NOBOUND" |
+  "NO-BOUND"		{
+	return NOBOUND;
+*/
   }
   "NODPCINDATA" 	|
   "NO-DPCINDATA"	|
@@ -701,6 +723,12 @@ COBOL_WORDS_DIRECTIVE_STATE>{
   "NOFOLD-COPY-NAME"	|
   "NO-FOLD-COPY-NAME"	{
 	return NOFOLDCOPYNAME;
+/* not merged yet
+  }
+  "NOSSRANGE"	|
+  "NO-SSRANGE"	{
+	return NOSSRANGE;
+*/
   }
   "NOODOSLIDE"	|
   "NO-ODOSLIDE"	{
@@ -714,6 +742,11 @@ COBOL_WORDS_DIRECTIVE_STATE>{
   }
   "REMOVE"		{
 	return REMOVE;
+/* not merged yet
+  }
+  "SSRANGE"	{
+	return SSRANGE;
+*/
   }
   "SOURCEFORMAT" |
   "SOURCE-FORMAT"	{
@@ -991,8 +1024,6 @@ ppopen (const char *name, struct cb_replace_list *replacing_list)
 	char			*dname;
 	cb_tree			x = NULL;
 
-	unsigned char		bom[4];
-
 	if (ppin) {
 		for (; newline_count > 0; newline_count--) {
 			ungetc ('\n', ppin);
@@ -1045,6 +1076,7 @@ ppopen (const char *name, struct cb_replace_list *replacing_list)
 	/* Check for BOM - *not* for input from stdin as rewind() clears the input
 	  buffer if used on stdin and output in console has normally no BOM at all */
 	if (ppin && strcmp (name, COB_DASH) != 0) {
+		unsigned char		bom[4];
 		if (fread (bom, 3, 1, ppin) == 1) {
 			if (bom[0] != 0xEF || bom[1] != 0xBB || bom[2] != 0xBF) {
 				rewind (ppin);
@@ -1488,25 +1520,84 @@ switch_to_buffer (const int line, const char *file, const YY_BUFFER_STATE buffer
 	yy_switch_to_buffer (buffer);
 }
 
-static int
-is_condition_directive_clause (const char *buff)
-{
-	while (buff && !isalpha ((unsigned char)(*buff))) {
-		++buff;
-	}
-
-	return buff && (strncasecmp (buff, "END", 3) == 0
-			|| strncasecmp (buff, "IF", 2) == 0
-			|| strncasecmp (buff, "ELSE", 4) == 0
-			|| strncasecmp (buff, "ELIF", 4) == 0
-			|| strncasecmp (buff, "EVALUATE", 8) == 0
-			|| strncasecmp (buff, "WHEN", 4) == 0);
-}
-
-static int
+static COB_INLINE COB_A_INLINE int
 is_cobol_word_char (const char c)
 {
 	return c == '-' || c == '_' || isalnum (c);
+}
+
+static char *
+get_word (const char *str, char *word_buff)
+{
+	char *ret = NULL;
+	if (str) {
+		int length = COB_MAX_WORDLEN + 1;
+		while (*str == ' ' || *str == ',' || *str == ';') {
+			++str;
+		}
+		ret = word_buff;
+		while (is_cobol_word_char(*str)
+		    && length--) {
+			*word_buff++ = toupper((unsigned char)*str++);
+		}
+		if (length != 0) {
+			*word_buff = 0;
+		} else {
+			ret = NULL;
+		}		
+	}
+	return ret;
+}
+
+static int
+is_condition_directive_clause (const char *buff)
+{
+	char word_buff[COB_MAX_WORDLEN + 1];
+	char *p;
+	if (buff[0] == '$') {
+		buff++;
+	} else if (buff[0] == '>' && buff[1] == '>') {
+		buff += 2;
+	}
+	p = get_word (buff, word_buff);
+
+	if (p == NULL) {
+		return 0;
+	}
+
+	return (strcmp (p, "IF") == 0
+		|| strcmp (p, "ELSE") == 0
+		|| strcmp (p, "END-IF") == 0
+		|| strcmp (p, "ELIF") == 0
+		|| strcmp (p, "END") == 0
+		|| strcmp (p, "EVALUATE") == 0
+		|| strcmp (p, "WHEN") == 0)
+		|| strcmp (p, "END-EVALUATE") == 0;
+}
+
+static int
+next_word_is_comment_paragraph_name (const char *buff)
+{
+	char word_buff[COB_MAX_WORDLEN + 1];
+	const char	*p = get_word (buff, word_buff);
+
+	if (!p) {
+		return 0;
+	}
+	if (strcmp (p, "AUTHOR") == 0
+	 || strcmp (p, "DATE-WRITTEN") == 0
+	 || strcmp (p, "DATE-MODIFIED") == 0
+	 || strcmp (p, "DATE-COMPILED") == 0
+	 || strcmp (p, "INSTALLATION") == 0
+	 || strcmp (p, "REMARKS") == 0
+	 || strcmp (p, "SECURITY") == 0) {
+		if (cb_comment_paragraphs != CB_IGNORE) {
+			/* check so we get warnings / errors, but leave result unchanged */
+			cb_plex_verify (newline_count, cb_comment_paragraphs, p);
+			return 1;
+		}
+	}
+	return 0;
 }
 
 
@@ -1528,7 +1619,6 @@ ppinput (char *buff, const size_t max_size)
 	int	n;
 	int	coln;
 	struct list_skip *skip;
-	const char	*paragraph_name;
 
 	/* check that we actually have input to process
 	   (isn't the case if something went wrong beforehand) */
@@ -1578,8 +1668,13 @@ start:
 		ipchar = getc (ppin);
 		if (ipchar == EOF) {
 			if (n > 0) {
-				/* No end of line at end of file */
-				break;
+				/* No end of line at end of file
+				   ignore if all space,
+				   otherwise raise an error */
+				do {
+					if (buff[--n] != ' ') break;
+				} while (n != 0);
+				if (n != 0) break;
 			}
 			if (newline_count == 0) {
 				return YY_NULL;
@@ -1630,12 +1725,12 @@ start:
 
 	if (buff[n - 1] != '\n') {
 		/* FIXME: cb_source_line is one too low when CB_FORMAT_FREE is used
-		   [but only during ppinput() in pplex.l ?] - Workaround for now:
-		   Temporary newline_count + 1
+		   [but only during ppinput() in pplex.l ?]
+		   Workaround for now: Temporary newline_count + 1
 		*/
 		if (cb_source_format == CB_FORMAT_FREE) {
 			if (line_overflow == 0) {
-				cb_plex_warning (COBC_WARN_FILLER, newline_count + 1,
+				cb_plex_warning (cb_missing_newline, newline_count + 1,
 						 _("line not terminated by a newline"));
 			} else if (line_overflow == 2) {
 				cb_plex_warning (COBC_WARN_FILLER, newline_count + 1,
@@ -1644,7 +1739,7 @@ start:
 			}
 		} else {
 			if (line_overflow == 0) {
-				cb_plex_warning (COBC_WARN_FILLER, newline_count,
+				cb_plex_warning (cb_missing_newline, newline_count,
 						 _("line not terminated by a newline"));
 			} else if (line_overflow == 2) {
 				cb_plex_warning (COBC_WARN_FILLER, newline_count,
@@ -1697,7 +1792,7 @@ start:
 			/* Show warning if it is not whitespace
 			   (postponed after checking for comments by setting
 			    line_overflow to first column that leads to
-				"source text too long")
+			    "source text too long")
 			*/
 			if (cb_warn_column_overflow && line_overflow == 0) {
 				for (coln = cb_text_column; coln < n; ++coln) {
@@ -1718,11 +1813,11 @@ start:
 		}
 
 		memset (buff, ' ', (size_t)6);
-			/* Note we allow directive lines to start at column 7 */
+		/* Note we allow directive lines to start at column 7 */
 		bp = &buff[6];
 
-			/* Special case: acucomment must be checked here as we'd pass comments
-			   as directives otherwise */
+		/* Special case: acucomment must be checked here as we'd pass comments
+		   as directives otherwise */
 		if (cb_flag_acucomment && buff[6] == '$') {
 			buff[6] = '*';
 		}
@@ -1793,7 +1888,7 @@ start:
 		}
 	}
 	if (ipchar && (!plex_skip_input
-		        || is_condition_directive_clause (bp))) {
+	            || is_condition_directive_clause (bp))) {
 		/* Directive - pass complete line with NL to ppparse */
 		if (newline_count) {
 			/* Move including NL and NULL byte */
@@ -1827,34 +1922,11 @@ start:
 	/*
 	  Check that line isn't start of ID DIVISION comment paragraph.
 	*/
-	if (comment_allowed) {
-		if (!strncasecmp (bp, "AUTHOR", 6)) {
-			paragraph_name = "AUTHOR";
-		} else if (!strncasecmp (bp, "DATE-WRITTEN", 12)) {
-			paragraph_name = "DATE-WRITTEN";
-		} else if (!strncasecmp (bp, "DATE-MODIFIED", 13)) {
-			paragraph_name = "DATE-MODIFIED";
-		} else if (!strncasecmp (bp, "DATE-COMPILED", 13)) {
-			paragraph_name = "DATE-COMPILED";
-		} else if (!strncasecmp (bp, "INSTALLATION", 12)) {
-			paragraph_name = "INSTALLATION";
-		} else if (!strncasecmp (bp, "REMARKS", 7)) {
-			paragraph_name = "REMARKS";
-		} else if (!strncasecmp (bp, "SECURITY", 8)) {
-			paragraph_name = "SECURITY";
-		} else {
-			paragraph_name = NULL;
-		}
-
-		if (paragraph_name
-		    && !is_cobol_word_char (bp[strlen (paragraph_name)])) {
-			cb_plex_verify (newline_count, cb_comment_paragraphs,
-					paragraph_name);
-			/* Skip comments until the end of line. */
-			within_comment = 1;
-			++newline_count;
-			goto start;
-		}
+	if (comment_allowed && next_word_is_comment_paragraph_name (bp)) {
+		/* Skip comments until the end of line. */
+		within_comment = 1;
+		++newline_count;
+		goto start;
 	}
 
 	/* Return when free format (no floating comments removed!) */

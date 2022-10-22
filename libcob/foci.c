@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -19,14 +19,11 @@
 */
 
 
-/* Force symbol exports */
-#define	COB_LIB_EXPIMP
 #include "fileio.h"
 
+/* the common build system only compiles this file if OCI is available,
+   but legacy hard-wired ones like VS need this "all file" check) */
 #ifdef WITH_OCI
-#ifdef WITH_ODBC
-#undef WITH_ODBC
-#endif
 
 #include <oci.h>
 

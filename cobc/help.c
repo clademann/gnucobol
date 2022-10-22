@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Ron Norman, Simon Sobisch,
    Brian Tiffin, Edward Hart, Dave Pitts
 
@@ -22,9 +22,9 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "cobc.h"
-#include "lib/gettext.h"
 
 void
 cobc_print_usage (char * prog)
@@ -57,7 +57,8 @@ cobc_print_usage_common_options (void)
 {
 	puts (_("Options:"));
 	puts (_("  -h, --help            display this help and exit"));
-	puts (_("  -V, --version         display compiler version and exit"));
+	puts (_("  -V, --version         display compiler version information and exit"));
+	puts (_("  -dumpversion          display compiler version and exit"));
 	puts (_("  -i, --info            display compiler information (build/environment)\n" 
 	        "                        and exit"));
 	puts (_("  -v, --verbose         verbose mode, display additional information;\n"
@@ -77,7 +78,8 @@ cobc_print_usage_common_options (void)
 	        "                        default, cobol2014, cobol2002, cobol85, xopen,\n"
 	        "                        ibm-strict, ibm, mvs-strict, mvs,\n"
 	        "                        mf-strict, mf, bs2000-strict, bs2000,\n"
-	        "                        acu-strict, acu, rm-strict, rm;\n"
+	        "                        acu-strict, acu, rm-strict, rm, gcos-strict,\n"
+	        "                        gcos;\n"
 	        "                        see configuration files in directory config"));
 	puts (_("  -F, --free            use free source format"));
 	puts (_("  --fixed               use fixed source format (default)"));
@@ -226,6 +228,8 @@ cobc_print_usage_dialect (void)
 	cobc_print_config_flag (name, doc, _("<value>"));
 #define	CB_CONFIG_INT(var,name,min,max,odoc,doc)		\
 	cobc_print_config_flag (name, doc, odoc);
+#define	CB_CONFIG_SINT(var,name,min,max,odoc,doc)		\
+	cobc_print_config_flag (name, doc, odoc);
 #define	CB_CONFIG_SIZE(var,name,min,max,odoc,doc)		\
 	cobc_print_config_flag (name, doc, odoc);
 #define	CB_CONFIG_ANY(type,var,name,doc)		\
@@ -237,6 +241,7 @@ cobc_print_usage_dialect (void)
 #include "config.def"
 #undef	CB_CONFIG_ANY
 #undef	CB_CONFIG_INT
+#undef	CB_CONFIG_SINT
 #undef	CB_CONFIG_SIZE
 #undef	CB_CONFIG_STRING
 #undef	CB_CONFIG_BOOLEAN

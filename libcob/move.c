@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2020, 2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman,
    Edwart Hard
 
@@ -36,7 +36,7 @@
 
 /* Force symbol exports */
 #define	COB_LIB_EXPIMP
-#include "libcob.h"
+#include "common.h"
 #include "coblocal.h"
 
 static cob_global	*cobglobptr;
@@ -55,14 +55,12 @@ static const cob_field_attr	const_binll_attr =
 				 COB_FLAG_HAVE_SIGN, NULL};
 static const cob_field_attr	all_display_attr =
 				{COB_TYPE_ALPHANUMERIC, 0, 0, 0, NULL};
-static const cob_field_attr	all_numeric_display_attr =
-				{COB_TYPE_NUMERIC_DISPLAY, COB_MAX_DIGITS, 0,
-				 0, NULL};
 
+static const cob_field_attr	all_numeric_display_attr =
+				{COB_TYPE_NUMERIC_DISPLAY, COB_MAX_DIGITS, 0, 0, NULL};
 static unsigned char all_numeric_data[COB_MAX_DIGITS];
 static const cob_field	all_numeric_field  = 
-				{COB_MAX_DIGITS, all_numeric_data,
-				 &all_numeric_display_attr};
+				{COB_MAX_DIGITS, all_numeric_data, &all_numeric_display_attr};
 
 static const int	cob_exp10[10] = {
 	1,
@@ -123,22 +121,22 @@ static void
 store_common_region (cob_field *f, const unsigned char *data,
 		     const size_t size, const int scale)
 {
-	const unsigned char	*p;
-	unsigned char		*q;
-	size_t			csize;
-	size_t			cinc;
-	int			lf1 = -scale;
-	int			lf2 = -COB_FIELD_SCALE (f);
-	int			hf1 = (int) size + lf1;
-	int			hf2 = (int) COB_FIELD_SIZE (f) + lf2;
-	int			lcf;
-	int			gcf;
+	const int	lf1 = -scale;
+	const int	lf2 = -COB_FIELD_SCALE (f);
+	const int	lcf = cob_max_int (lf1, lf2);
 
-	lcf = cob_max_int (lf1, lf2);
-	gcf = cob_min_int (hf1, hf2);
+	const int	hf1 = (int) size + lf1;
+	const int	hf2 = (int) COB_FIELD_SIZE (f) + lf2;
+	const int	gcf = cob_min_int (hf1, hf2);
+
 	memset (COB_FIELD_DATA (f), '0', COB_FIELD_SIZE (f));
+
 	if (gcf > lcf) {
-		csize = (size_t)gcf - lcf;
+		const size_t	csize = (size_t)gcf - lcf;
+		size_t			cinc;
+		const unsigned char	*p;
+		unsigned char		*q;
+
 		p = data + hf1 - gcf;
 		q = COB_FIELD_DATA (f) + hf2 - gcf;
 		for (cinc = 0; cinc < csize; ++cinc, ++p, ++q) {
@@ -464,6 +462,31 @@ cob_move_display_to_packed (cob_field *f1, cob_field *f2)
 
 	/* Pack string */
 	memset (f2->data, 0, f2->size);
+	if (scale1 != scale2) {
+		int		diff = 0;
+		if (scale1 < 0 && scale2 < 0) {	/* Both have P */
+			if (scale1 < scale2)
+				diff = - scale2;
+			else
+				diff = - scale1;
+		}
+		if (scale2 < 0) {				/* 99PP type */
+			digits1 += scale2 + diff;
+			scale2 = 0;
+		} else 
+		if (scale2 > digits2) {			/* VPP99 type */
+			digits2 = scale2 + diff;
+			scale2 = 0;
+		}
+		if (scale1 < 0) {
+			digits2 += scale1 + diff;
+			scale1 = 0;
+		} else 
+		if (scale1 > digits1) {
+			digits1 = scale1 + diff;
+			scale1 = 0;
+		}
+	}
 	if (COB_FIELD_NO_SIGN_NIBBLE (f2)) {
 		offset = digits2 % 2;
 	} else {
@@ -1231,14 +1254,16 @@ cob_init_table (void *tbl, unsigned long len, long occ)
 void
 cob_move (cob_field *src, cob_field *dst)
 {
-	int		opt;
+	int		opt, src_scl;
+	size_t	src_dig;
 	cob_field	temp;
-	unsigned char	data[4];
+	unsigned char	data[2];
 
 	if (src == dst) {
 		return;
 	}
 	if (dst->size == 0) {
+		/* TODO: for dynamic sized items: allocate and go on */
 		return;
 	}
 	if (src->size == 0) {
@@ -1269,6 +1294,16 @@ cob_move (cob_field *src, cob_field *dst)
 		}
 	}
 
+	if (COB_FIELD_SCALE (src) < 0) {
+		src_dig = COB_FIELD_DIGITS (src) - COB_FIELD_SCALE (src);
+		src_scl = 0;
+	} else if (COB_FIELD_SCALE (src) > COB_FIELD_DIGITS (src)) {
+		src_dig = COB_FIELD_SCALE (src);
+		src_scl = 0;
+	} else {
+		src_dig = COB_FIELD_DIGITS (src);
+		src_scl = COB_FIELD_SCALE (src);
+	}
 	/* Elementary move */
 	switch (COB_FIELD_TYPE (src)) {
 	case COB_TYPE_NUMERIC_DISPLAY:
@@ -1300,9 +1335,14 @@ cob_move (cob_field *src, cob_field *dst)
 			if (COB_FIELD_SCALE (src) < 0
 			 || COB_FIELD_SCALE (src) > COB_FIELD_DIGITS (src)) {
 				/* Expand P's */
-				indirect_move (cob_move_display_to_display, src, dst,
-						(size_t)cob_max_int ((int)COB_FIELD_DIGITS(src), (int)COB_FIELD_SCALE(src)),
-						cob_max_int (0, (int)COB_FIELD_SCALE(src)));
+				if (COB_FIELD_SCALE (src) > COB_FIELD_DIGITS (src))
+					src_dig = COB_FIELD_SCALE (src);
+				else if (COB_FIELD_SCALE (src) < 0)
+					src_dig = COB_FIELD_DIGITS (src) - COB_FIELD_SCALE (src);
+				else
+					src_dig = COB_FIELD_SIZE (src);
+				indirect_move (cob_move_display_to_display, src, dst, src_dig,
+								cob_max_int (0, (int)COB_FIELD_SCALE(src)));
 				return;
 			} else {
 				cob_move_alphanum_to_edited (src, dst);
@@ -1335,8 +1375,7 @@ cob_move (cob_field *src, cob_field *dst)
 			return;
 		default:
 			indirect_move (cob_move_packed_to_display, src, dst,
-					(size_t)(COB_FIELD_DIGITS(src)),
-					COB_FIELD_SCALE(src));
+							COB_FIELD_DIGITS (src), COB_FIELD_SCALE (src));
 			return;
 		}
 
@@ -1367,13 +1406,11 @@ cob_move (cob_field *src, cob_field *dst)
 			return;
 		case COB_TYPE_NUMERIC_EDITED:
 			indirect_move (cob_move_binary_to_display, src, dst,
-					(size_t)COB_MAX_DIGITS,
-					COB_FIELD_SCALE(src));
+					(size_t)COB_MAX_DIGITS, COB_FIELD_SCALE(src));
 			return;
 		default:
 			indirect_move (cob_move_binary_to_display, src, dst,
-					(size_t)(COB_FIELD_DIGITS(src)),
-					COB_FIELD_SCALE(src));
+							src_dig, src_scl);
 			return;
 		}
 
@@ -1395,8 +1432,7 @@ cob_move (cob_field *src, cob_field *dst)
 		case COB_TYPE_NUMERIC_FP_DEC64:
 		case COB_TYPE_NUMERIC_FP_DEC128:
 			indirect_move (cob_move_edited_to_display, src, dst,
-					(size_t)(2 * COB_MAX_DIGITS),
-					COB_MAX_DIGITS);
+					(size_t)(2 * COB_MAX_DIGITS), COB_MAX_DIGITS);
 			return;
 		case COB_TYPE_ALPHANUMERIC_EDITED:
 			cob_move_alphanum_to_edited (src, dst);
@@ -1525,8 +1561,7 @@ cob_move (cob_field *src, cob_field *dst)
 		case COB_TYPE_NUMERIC_FP_DEC64:
 		case COB_TYPE_NUMERIC_FP_DEC128:
 			indirect_move (cob_move_alphanum_to_display, src, dst,
-					(size_t)(2 * COB_MAX_DIGITS),
-					COB_MAX_DIGITS);
+					(size_t)(2 * COB_MAX_DIGITS), COB_MAX_DIGITS);
 			return;
 		case COB_TYPE_ALPHANUMERIC_EDITED:
 			cob_move_alphanum_to_edited (src, dst);
@@ -2466,19 +2501,20 @@ cob_get_s64_pic9 (void *mem, int len)
 
 	while (len-- > 1) {
 		if (isdigit (*p)) {
-			val = val * 10 + (*p - '0');
+			val = val * 10 + COB_D2I (*p);
 		} else if (*p == '-') {
 			sign = -1;
 		}
 		p++;
 	}
 	if (isdigit (*p)) {
-		val = val * 10 + (*p - '0');
+		val = val * 10 + COB_D2I (*p);
 	} else if (*p == '-') {
 		sign = -1;
 	} else if (*p == '+') {
 		sign = 1;
 	} else if (COB_MODULE_PTR->ebcdic_sign) {
+#ifndef	COB_EBCDIC_MACHINE
 		switch(*p) {
 		case '{': val = val * 10 + 0; sign =  1; break;
 		case 'A': val = val * 10 + 1; sign =  1; break;
@@ -2501,8 +2537,16 @@ cob_get_s64_pic9 (void *mem, int len)
 		case 'Q': val = val * 10 + 8; sign = -1; break;
 		case 'R': val = val * 10 + 9; sign = -1; break;
 		}
+#else
+		if (*p & 0xC0) {
+			sign = 1;
+		} else if (*p & 0xD0) {
+			sign = -1;
+		}
+		val = val * 10 + COB_D2I (*p);
+#endif
 	} else if (isdigit (*p & 0x3F)) {
-		val = val * 10 + (*p & 0x0F);
+		val = val * 10 + COB_D2I (*p);
 		if (*p & 0x40) {
 			sign = -1;
 		}
@@ -2532,9 +2576,7 @@ cob_get_u64_pic9 (void *mem, int len)
 	cob_u8_t	*p = mem;
 
 	while (len-- > 0) {
-		if (isdigit (*p)) {
-			val = val * 10 + (*p - '0');
-		}
+		val = val * 10 + COB_D2I (*p);
 		p++;
 	}
 

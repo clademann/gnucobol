@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -19,10 +19,10 @@
 */
 
 
-/* Force symbol exports */
-#define	COB_LIB_EXPIMP
 #include "fileio.h"
 
+/* the common build system only compiles this file if BDB is available,
+   but legacy hard-wired ones like VS need this "all file" check) */
 #ifdef WITH_DB
 
 #include <db.h>
@@ -252,12 +252,12 @@ ix_bdb_sync (cob_file_api *a, cob_file *f)
 	if (f->organization == COB_ORG_INDEXED) {
 		p = f->file;
 		if (p) {
-			for (i = 0; i < (int)f->nkeys; ++i) {
-				if (p->db[i]) {
-					DB_SYNC (p->db[i]);
-				}
+		for (i = 0; i < (int)f->nkeys; ++i) {
+			if (p->db[i]) {
+				DB_SYNC (p->db[i]);
 			}
 		}
+	}
 	}
 	return 0;
 }
@@ -320,11 +320,12 @@ bdb_err_event (DB_ENV *env, u_int32_t event, void *info)
 	default: msg = "unknown"; break;
 	}
 	cob_runtime_error (_("BDB (%s), error: %d %s"), "fatal error", event, msg);
-	cob_stop_run (1);
+	/* FIXME: check if possible to be passed to original caller returning status 39 */
+	cob_hard_failure ();
 }
 #endif
 
-static void
+static int
 join_environment (cob_file_api *a)
 {
 	cob_u32_t	flags;
@@ -334,19 +335,20 @@ join_environment (cob_file_api *a)
 		/* Default to the current directory */
 		file_setptr->bdb_home = strdup(".");
 	} else if (file_setptr->bdb_home[0] <= ' '
-		|| strcasecmp(file_setptr->bdb_home,"no") == 0
-		|| strcasecmp(file_setptr->bdb_home,"false") == 0) {
+	        || strcasecmp (file_setptr->bdb_home, "no") == 0
+	        || strcasecmp (file_setptr->bdb_home, "false") == 0) {
 		/* This effectively disables record/file locking */
 		/* But prevents the BDB control files from being created */
-		return;
+		return 0;
 	}
-	if(file_setptr->bdb_home)
+	if (file_setptr->bdb_home) {
 		bdb_home_dir = cob_strdup(file_setptr->bdb_home);
+	}
 	ret = db_env_create (&bdb_env, 0);
 	if (ret) {
 		cob_runtime_error (_("cannot join BDB environment (%s), error: %d %s"),
 				   "env_create", ret, db_strerror (ret));
-		cob_stop_run (1);
+		return ret;
 	}
 	bdb_env->set_errfile (bdb_env, stderr);
 #if (DB_VERSION_MAJOR > 4) || ((DB_VERSION_MAJOR == 4) && (DB_VERSION_MINOR > 2))
@@ -366,7 +368,7 @@ join_environment (cob_file_api *a)
 				   "env->open", ret, db_strerror (ret));
 		bdb_env->close (bdb_env, 0);
 		bdb_env = NULL;
-		cob_stop_run (1);
+		return ret;
 	}
 #if (DB_VERSION_MAJOR > 4) || ((DB_VERSION_MAJOR == 4) && (DB_VERSION_MINOR > 1))
 	bdb_env->get_data_dirs (bdb_env, &bdb_data_dir);
@@ -376,6 +378,7 @@ join_environment (cob_file_api *a)
 #if (DB_VERSION_MAJOR > 4)
 	bdb_env->set_event_notify(bdb_env, (void*)bdb_err_event);
 #endif
+	return 0;
 }
 
 /* Impose lock on 'file' using BDB locking */
@@ -405,14 +408,16 @@ bdb_lock_file (cob_file *f, char *filename, int lock_mode)
 			(file_setptr->cob_retry_times>0?file_setptr->cob_retry_times:1);
 		interval = file_setptr->cob_retry_seconds>0?file_setptr->cob_retry_seconds:1;
 	}
-	if(retry > 0) {
+
+	memset (&dbt, 0, sizeof (dbt));
+	dbt.size = (cob_dbtsize_t) strlen (filename);
+	dbt.data = filename;
+
+	if (retry > 0) {
 		retry = retry * interval * COB_RETRY_PER_SECOND ;
 		interval = 1000 / COB_RETRY_PER_SECOND ;
 	}
 	do {
-		memset(&dbt,0,sizeof(dbt));
-		dbt.size = (cob_dbtsize_t) strlen (filename);
-		dbt.data = filename;
 		ret = bdb_env->lock_get (bdb_env, bdb_lock_id, DB_LOCK_NOWAIT,
 					&dbt, lock_mode, &p->bdb_file_lock);
 		if (ret == 0) {
@@ -440,18 +445,33 @@ bdb_lock_file (cob_file *f, char *filename, int lock_mode)
 	return ret;
 }
 
+static void
+set_dbt (struct indexed_file *p, DBT *dbt, const char *key, const unsigned int keylen)
+{
+	size_t	len = keylen + p->filenamelen + 1;
+	if (len > rlo_size) {
+		record_lock_object = cob_realloc (record_lock_object, rlo_size, len);
+		rlo_size = len;
+	}
+	memcpy ((char *)record_lock_object, p->filename,
+		(size_t)(p->filenamelen + 1));
+	memcpy ((char *)record_lock_object + p->filenamelen + 1, key,
+		(size_t)keylen);
+	memset (dbt, 0, sizeof (DBT));
+	dbt->size = (cob_dbtsize_t) len;
+	dbt->data = record_lock_object;
+}
+
 /* Impose lock on record and table it */
 static int
 bdb_lock_record (cob_file *f, const char *key, const unsigned int keylen)
 {
-	struct indexed_file	*p;
-	size_t			len;
+	struct indexed_file	*p = f->file;
 	int			j, k, ret, retry, interval;
 	DBT			dbt;
 
 	if (bdb_env == NULL) 
 		return 0;
-	p = f->file;
 	ret = 0;
 	retry = interval = 0;
 	if ((f->retry_mode & COB_RETRY_FOREVER)) {
@@ -468,24 +488,14 @@ bdb_lock_record (cob_file *f, const char *key, const unsigned int keylen)
 		interval = file_setptr->cob_retry_seconds>0?file_setptr->cob_retry_seconds:1;
 	}
 
-	len = keylen + p->filenamelen + 1;
-	if (len > rlo_size) {
-		cob_free (record_lock_object);
-		record_lock_object = cob_malloc (len);
-		rlo_size = len;
-	}
-	memcpy ((char *)record_lock_object, p->filename, (size_t)(p->filenamelen + 1));
-	memcpy ((char *)record_lock_object + p->filenamelen + 1, key, (size_t)keylen);
+	set_dbt (p, &dbt, key, keylen);
 
-	if(retry > 0) {
+	if (retry > 0) {
 		retry = retry * interval * COB_RETRY_PER_SECOND;
 		interval = 1000 / COB_RETRY_PER_SECOND;
 	}
 
 	do {
-		memset(&dbt,0,sizeof(dbt));
-		dbt.size = (cob_dbtsize_t) len;
-		dbt.data = record_lock_object;
 		ret = bdb_env->lock_get (bdb_env, bdb_lock_id, retry==-1?0:DB_LOCK_NOWAIT,
 					&dbt, DB_LOCK_WRITE, &p->bdb_record_lock);
 		if (ret == 0)
@@ -541,15 +551,13 @@ bdb_lock_record (cob_file *f, const char *key, const unsigned int keylen)
 static int
 bdb_test_record_lock (cob_file *f, const char *key, const unsigned int keylen)
 {
-	struct indexed_file	*p;
-	size_t			len;
+	struct indexed_file	*p = f->file;
 	int			j, k, ret, retry, interval;
 	DBT			dbt;
 	DB_LOCK			test_lock;
 
 	if (bdb_env == NULL) 
 		return 0;
-	p = f->file;
 	ret = 0;
 	retry = interval = 0;
 	if ((f->retry_mode & COB_RETRY_FOREVER)) {
@@ -565,23 +573,15 @@ bdb_test_record_lock (cob_file *f, const char *key, const unsigned int keylen)
 			(file_setptr->cob_retry_times>0?file_setptr->cob_retry_times:1);
 		interval = file_setptr->cob_retry_seconds>0?file_setptr->cob_retry_seconds:1;
 	}
-	len = keylen + p->filenamelen + 1;
-	if (len > rlo_size) {
-		cob_free (record_lock_object);
-		record_lock_object = cob_malloc (len);
-		rlo_size = len;
-	}
-	memcpy ((char *)record_lock_object, p->filename, (size_t)(p->filenamelen + 1));
-	memcpy ((char *)record_lock_object + p->filenamelen + 1, key, (size_t)keylen);
+
 	memset(&test_lock,0,sizeof(test_lock));
-	if(retry > 0) {
+	set_dbt (p, &dbt, key, keylen);
+  
+	if (retry > 0) {
 		retry = retry * interval * COB_RETRY_PER_SECOND ;
 		interval = 1000 / COB_RETRY_PER_SECOND ;
 	}
 	do {
-		memset(&dbt,0,sizeof(dbt));
-		dbt.size = (cob_dbtsize_t) len;
-		dbt.data = record_lock_object;
 		ret = bdb_env->lock_get (bdb_env, bdb_lock_id, DB_LOCK_NOWAIT,
 					&dbt, DB_LOCK_WRITE, &test_lock);
 		if (ret == 0)
@@ -625,10 +625,9 @@ bdb_test_record_lock (cob_file *f, const char *key, const unsigned int keylen)
 static int
 bdb_unlock_all (cob_file *f)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret = 0, k;
 
-	p = f->file;
 	if (p->bdb_lock_num == 0
 	 || bdb_env == NULL) {
 		return 0;
@@ -652,10 +651,9 @@ bdb_unlock_all (cob_file *f)
 static int
 bdb_unlock_last (cob_file *f)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret = 0;
 
-	p = f->file;
 	if (p->bdb_lock_num == 0
 	 || bdb_env == NULL) {
 		return 0;
@@ -675,10 +673,9 @@ bdb_unlock_last (cob_file *f)
 static int
 bdb_test_lock_advance(cob_file *f, int nextprev, int skip_lock)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret;
 
-	p = f->file;
 	ret = bdb_test_record_lock (f, p->key.data, p->key.size);
 	while (ret == COB_STATUS_51_RECORD_LOCKED
 	   &&  skip_lock) {
@@ -695,10 +692,9 @@ bdb_test_lock_advance(cob_file *f, int nextprev, int skip_lock)
 static int
 bdb_lock_advance(cob_file *f, int nextprev, int skip_lock)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret;
 
-	p = f->file;
 	ret = bdb_lock_record (f, p->key.data, p->key.size);
 	while (ret == COB_STATUS_51_RECORD_LOCKED
 	   &&  skip_lock) {
@@ -716,11 +712,10 @@ bdb_lock_advance(cob_file *f, int nextprev, int skip_lock)
 static unsigned int
 get_dupno (cob_file *f, const cob_u32_t i)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret;
 	unsigned int		dupno;
 
-	p = f->file;
 	dupno = 0;
 	bdb_setkey(f, i);
 	memcpy (p->temp_key, p->key.data, (size_t)p->maxkeylen);
@@ -740,16 +735,13 @@ get_dupno (cob_file *f, const cob_u32_t i)
 static int
 check_alt_keys (cob_file *f, const int rewrite)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			i;
-	int			ret;
 
-	p = f->file;
 	for (i = 1; i < (int)f->nkeys; ++i) {
 		if (!f->keys[i].tf_duplicates) {
 			bdb_setkey (f, i);
-			ret = DB_GET (p->db[i], 0);
-			if (ret == 0) {
+			if (DB_GET (p->db[i], 0) == 0) {
 				if (rewrite) {
 					if (db_cmpkey (f, p->data.data, f->record->data, 0, 0)) {
 						return 1;
@@ -766,14 +758,13 @@ check_alt_keys (cob_file *f, const int rewrite)
 static int
 ix_bdb_write_internal (cob_file *f, const int rewrite, const int opt)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	cob_u32_t		i, len;
 	unsigned int		dupcnt = 0;
 	unsigned int		dupno = 0;
 	cob_u32_t		flags = 0;
 	int			close_cursor, ret;
 
-	p = f->file;
 	close_cursor = bdb_open_cursor (f, 1);
 
 	/* Check duplicate alternate keys */
@@ -858,14 +849,13 @@ static int
 ix_bdb_start_internal (cob_file *f, const int cond, cob_field *key,
 			const int read_opts, const int test_lock)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			ret, len, fullkeylen, partlen;
 	unsigned int		dupno;
 	int			key_index;
 
 	dupno = 0;
 	ret = 0;
-	p = f->file;
 	p->start_cond = cond;
 	/* Look up for the key */
 	key_index = db_findkey (f, key, &fullkeylen, &partlen);
@@ -977,14 +967,17 @@ ix_bdb_start_internal (cob_file *f, const int cond, cob_field *key,
 			memcpy (p->last_readkey[0], p->key.data, p->primekeylen);
 		} else {
 			int keylen = db_keylen (f, p->key_index);
+			/* LCOV_EXCL_START */
 			if (partlen <= 0) {
-				cob_runtime_error (_("invalid internal call of %s"), "ix_bdb_start_internal/db_keylen");
-				cob_runtime_error (_("Please report this!"));
-				cob_stop_run (1);
+				cob_runtime_error (_("invalid internal call of %s"),
+					"indexed_start_internal/bdb_keylen");
+				cob_hard_failure_internal ("libcob");
 			}
+			/* LCOV_EXCL_STOP */
 			memcpy (p->last_readkey[p->key_index],
 				    p->temp_key, keylen);
-			memcpy (p->last_readkey[p->key_index + f->nkeys], p->key.data, p->primekeylen);
+			memcpy (p->last_readkey[p->key_index + f->nkeys],
+				    p->key.data, p->primekeylen);
 			if (f->keys[p->key_index].tf_duplicates) {
 				p->last_dupno[p->key_index] = dupno;
 			}
@@ -1002,7 +995,7 @@ ix_bdb_start_internal (cob_file *f, const int cond, cob_field *key,
 static int
 ix_bdb_delete_internal (cob_file *f, const int rewrite, int bdb_opts)
 {
-	struct indexed_file	*p;
+	struct indexed_file	*p = f->file;
 	int			i,len;
 	DBT			prim_key;
 	int			ret;
@@ -1010,7 +1003,6 @@ ix_bdb_delete_internal (cob_file *f, const int rewrite, int bdb_opts)
 	int			close_cursor = 0;
 	COB_UNUSED(bdb_opts);
 
-	p = f->file;
 	if (!(f->lock_mode & COB_LOCK_MULTIPLE)) {
 		bdb_unlock_all (f);
 	}
@@ -1187,7 +1179,13 @@ ix_bdb_open (cob_file_api *a, cob_file *f, char *filename, const int mode, const
 	COB_UNUSED (sharing);
 
 	if (bdb_join) {			/* Join BDB, on first OPEN of INDEXED file */
-		join_environment (a);
+		if (join_environment (a)) {
+#if 0	/* better return a permanent or sharing error */
+			cob_hard_failure ();
+#else
+			return COB_STATUS_61_FILE_SHARING;
+#endif
+		}
 		bdb_join = 0;
 	}
 
@@ -1240,6 +1238,11 @@ ix_bdb_open (cob_file_api *a, cob_file *f, char *filename, const int mode, const
 	case COB_OPEN_EXTEND:
 		flags |= DB_CREATE;
 		break;
+	/* LCOV_EXCL_START */
+	default:
+		cob_runtime_error (_("invalid internal call of %s"), "indexed_open");
+		cob_fatal_error (COB_FERROR_CODEGEN);
+	/* LCOV_EXCL_STOP */
 	}
 
 	if (mode != COB_OPEN_OUTPUT) {
@@ -2057,9 +2060,9 @@ cob_bdb_init_fileio (cob_file_api *a)
 	a->io_funcs[COB_IO_BDB] = (void*)&ext_indexed_funcs;
 	bdb_env = NULL;
 	bdb_data_dir = NULL;
-	record_lock_object = cob_malloc ((size_t)1024);
 	bdb_buff = cob_malloc ((size_t)COB_SMALL_BUFF);
-	rlo_size = 1024;
+	rlo_size = COB_SMALL_BUFF;
+	record_lock_object = cob_malloc (rlo_size);
 }
 
 #endif

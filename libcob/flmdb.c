@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -18,15 +18,15 @@
    along with GnuCOBOL.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* Force symbol exports */
-#define	COB_LIB_EXPIMP
 #include "fileio.h"
+
+/* the common build system only compiles this file if LMDB is available,
+   but legacy hard-wired ones like VS need this "all file" check) */
+#if WITH_LMDB
 
 #ifdef HAVE_SYS_SYSMACROS_H
 #include <sys/sysmacros.h>
 #endif
-
-#if WITH_LMDB
 
 /* Local variables */
 
@@ -43,6 +43,7 @@ static void cob_lmdb_exit_fileio (cob_file_api *a);
 static int cob_lmdb_fork (cob_file_api *a);
 static int ix_lmdb_file_unlock(cob_file_api *, cob_file *);
 static char * lmdb_version (void);
+
 void cob_lmdb_init_fileio (cob_file_api *a);
 
 static int ix_lmdb_dummy () { return 0; }

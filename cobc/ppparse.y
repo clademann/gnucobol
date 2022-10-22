@@ -1,6 +1,6 @@
 /*
-   Copyright (C) 2001-2012, 2015-2021 Free Software Foundation, Inc.
-   Written by Keisuke Nishida, Roger While, Simon Sobisch
+   Copyright (C) 2001-2012, 2015-2022 Free Software Foundation, Inc.
+   Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart
 
    This file is part of GnuCOBOL.
 
@@ -18,13 +18,13 @@
    along with GnuCOBOL.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-%require "3.0"
+%require "3.6"
 
 %expect 0
 
 %defines
-%define parse.error verbose
 %verbose
+%define parse.error verbose
 %define api.prefix {pp}
 
 %{
@@ -34,6 +34,9 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef	HAVE_STRINGS_H
+#include <strings.h>
+#endif
 #include <ctype.h>
 
 #define	COB_IN_PPPARSE	1
@@ -81,9 +84,7 @@ fold_lower (char *name)
 	unsigned char	*p;
 
 	for (p = (unsigned char *)name; *p; p++) {
-		if (isupper (*p)) {
-			*p = (cob_u8_t)tolower (*p);
-		}
+		*p = (cob_u8_t)tolower (*p);
 	}
 	return name;
 }
@@ -94,9 +95,7 @@ fold_upper (char *name)
 	unsigned char	*p;
 
 	for (p = (unsigned char *)name; *p; p++) {
-		if (islower (*p)) {
-			*p = (cob_u8_t)toupper (*p);
-		}
+		*p = (cob_u8_t)toupper (*p);
 	}
 	return name;
 }
@@ -403,7 +402,7 @@ static unsigned int
 ppp_search_comp_vars (const char *name)
 {
 #undef	CB_PARSE_DEF
-#define	CB_PARSE_DEF(x,z)	if (!strcasecmp (name, x)) return (z);
+#define	CB_PARSE_DEF(x,z)	if (!cb_strcasecmp (name, x)) return (z);
 #include "ppparse.def"
 #undef	CB_PARSE_DEF
 	cb_warning (COBC_WARN_FILLER, _("compiler flag '%s' unknown"), name);
@@ -452,7 +451,11 @@ ppp_check_needs_quote (const char *envval)
 static void
 ppp_error_invalid_option (const char *directive, const char *option)
 {
-	cb_error (_("invalid %s directive option '%s'"), directive, option);
+	if (option) {
+		cb_error (_("invalid %s directive option '%s'"), directive, option);
+	} else {
+		cb_error (_("invalid %s directive option"), directive);
+	}
 }
 
 /* Global functions */
@@ -583,6 +586,8 @@ ppparse_clear_vars (const struct cb_define_struct *p)
 %token PARAMETER
 %token OVERRIDE
 
+%token REFMOD_DIRECTIVE
+
 %token SET_DIRECTIVE
 %token ADDRSV
 %token ADDSYN
@@ -601,6 +606,8 @@ ppparse_clear_vars (const struct cb_define_struct *p)
 %token ODOSLIDE
 %token REMOVE
 %token SOURCEFORMAT
+%token SPZERO
+%token SSRANGE
 
 %token IF_DIRECTIVE
 %token ELSE_DIRECTIVE
@@ -638,6 +645,7 @@ ppparse_clear_vars (const struct cb_define_struct *p)
 
 %type <s>	copy_in
 %type <s>	copy_source
+%type <s>	_literal
 
 %type <l>	token_list
 %type <l>	identifier
@@ -688,6 +696,7 @@ directive:
 | DEFINE_DIRECTIVE define_directive
 | COBOL_WORDS_DIRECTIVE cobol_words_directive
 | SET_DIRECTIVE set_directive
+| REFMOD_DIRECTIVE refmod_directive
 | TURN_DIRECTIVE turn_directive
 | LISTING_DIRECTIVE listing_directive
 | LEAP_SECOND_DIRECTIVE leap_second_directive
@@ -763,9 +772,9 @@ set_choice:
 	size = strlen (p) - 1;
 	p[size] = '\0';
 
-	if (!strcasecmp (p, "EXTERNAL")) {
+	if (!cb_strcasecmp (p, "EXTERNAL")) {
 		fprintf (ppout, "#ASSIGN %d\n", (int)CB_ASSIGN_EXT_FILE_NAME_REQUIRED);
-	} else if (!strcasecmp (p, "DYNAMIC")) {
+	} else if (!cb_strcasecmp (p, "DYNAMIC")) {
 		fprintf (ppout, "#ASSIGN %d\n", (int)CB_ASSIGN_VARIABLE_DEFAULT);
 	} else {
 		ppp_error_invalid_option ("ASSIGN", p);
@@ -802,9 +811,9 @@ set_choice:
 	size = strlen (p) - 1;
 	p[size] = '\0';
 
-	if (!strcasecmp (p, "BINARY")) {
+	if (!cb_strcasecmp (p, "BINARY")) {
 		cb_binary_comp_1 = 1;
-	} else if (!strcasecmp (p, "FLOAT")) {
+	} else if (!cb_strcasecmp (p, "FLOAT")) {
 		cb_binary_comp_1 = 0;
 	} else {
 		ppp_error_invalid_option ("COMP1", p);
@@ -820,11 +829,11 @@ set_choice:
 	size = strlen (p) - 1;
 	p[size] = '\0';
 
-	if (!strcasecmp (p, "XML")) {
+	if (!cb_strcasecmp (p, "XML")) {
 		cb_dpc_in_data = CB_DPC_IN_XML;
-	} else if (!strcasecmp (p, "JSON")) {
+	} else if (!cb_strcasecmp (p, "JSON")) {
 		cb_dpc_in_data = CB_DPC_IN_JSON;
-	} else if (!strcasecmp (p, "ALL")) {
+	} else if (!cb_strcasecmp (p, "ALL")) {
 		cb_dpc_in_data = CB_DPC_IN_ALL;
 	} else {
 		ppp_error_invalid_option ("DPC-IN-DATA", p);
@@ -840,9 +849,9 @@ set_choice:
 	size = strlen (p) - 1;
 	p[size] = '\0';
 
-	if (!strcasecmp (p, "UPPER")) {
+	if (!cb_strcasecmp (p, "UPPER")) {
 		cb_fold_copy = COB_FOLD_UPPER;
-	} else if (!strcasecmp (p, "LOWER")) {
+	} else if (!cb_strcasecmp (p, "LOWER")) {
 		cb_fold_copy = COB_FOLD_LOWER;
 	} else {
 		ppp_error_invalid_option ("FOLD-COPY-NAME", p);
@@ -892,12 +901,12 @@ set_choice:
 	size = strlen (p) - 1;
 	p[size] = '\0';
 
-	if (!strcasecmp (p, "FIXED")) {
+	if (!cb_strcasecmp (p, "FIXED")) {
 		cb_source_format = CB_FORMAT_FIXED;
 		cb_text_column = cb_config_text_column;
-	} else if (!strcasecmp (p, "FREE")) {
+	} else if (!cb_strcasecmp (p, "FREE")) {
 		cb_source_format = CB_FORMAT_FREE;
-	} else if (!strcasecmp (p, "VARIABLE")) {
+	} else if (!cb_strcasecmp (p, "VARIABLE")) {
 		cb_source_format = CB_FORMAT_FIXED;
 		/* This value matches most MF Visual COBOL 4.0 version. */
 		cb_text_column = 250;
@@ -906,6 +915,58 @@ set_choice:
 	}
 	if (cb_src_list_file) {
 		cb_current_file->source_format = cb_source_format;
+	}
+  }
+| SOURCEFORMAT _as error
+  {
+    /* FIXME: we should consume until end of line here! */
+	ppp_error_invalid_option ("SOURCEFORMAT", NULL);
+  }
+| SPZERO
+  {
+	CB_PENDING ("SPZERO");
+	/* TODO: cb_space_is_zero = 1; */
+  }
+| SSRANGE _literal
+  {
+	char	*p = $2;
+	char	ep = 0;
+	
+	/* Remove surrounding quotes/brackets */
+	if (p) {
+		size_t	size;
+		++p;
+		size = strlen (p) - 1;
+		p[size] = '\0';
+		if (size == 1 && *p >= '1' && *p <= '3') {
+			ep = *p;
+		}
+	} else {
+		ep = '2';
+	}
+
+	/* Enable EC-BOUND-SUBSCRIPT and -REF-MOD checking */
+	if (ep) {
+		struct cb_text_list	*txt;
+		if (ep == '3') {
+			/* SSRANGE"3": REF-MOD, with zero length allowed (at runtime) */
+			fprintf (ppout, "#REFMOD_ZERO 1\n");
+		} else if (ep == '2') {
+			/* SSRANGE"2": REF-MOD, zero length not allowed */
+			fprintf (ppout, "#REFMOD_ZERO 0\n");
+		} else /* if (ep == '1') */ {
+			/* SSRANGE"1": REF-MOD minimal - check only for zero/negative */
+			fprintf (ppout, "#REFMOD_ZERO 2\n");
+		}
+		txt = ppp_list_add (NULL, "EC-BOUND-SUBSCRIPT");
+		txt = ppp_list_add (txt, "EC-BOUND-REF-MOD");
+#if 0 /* not merged yet */
+		append_to_turn_list (txt, 1, 0);
+#else
+		CB_PENDING ("SSRANGE");
+#endif
+	} else {
+		ppp_error_invalid_option ("SSRANGE", p);
 	}
   }
 ;
@@ -980,6 +1041,19 @@ set_options:
   }
 ;
 
+refmod_directive:
+  _on
+  {
+	cb_ref_mod_zero_length = 1;
+	fprintf (ppout, "#OPTION REFMOD_ZERO 1\n");
+  }
+| OFF
+  {
+	cb_ref_mod_zero_length = 0;
+	fprintf (ppout, "#OPTION REFMOD_ZERO 0\n");
+  }
+;
+
 source_directive:
   _format _is format_type
   {
@@ -1011,6 +1085,11 @@ format_type:
   }
 ;
 
+_literal:
+  /* empty */	{ $$ = NULL; }
+| LITERAL
+;
+
 define_directive:
   VARIABLE_NAME _as LITERAL _override
   {
@@ -1026,13 +1105,12 @@ define_directive:
 	char			*s;
 	char			*q;
 	struct cb_define_struct	*p;
-	size_t			size;
 
 	s = getenv ($1);
 	q = NULL;
 	if (s && *s && *s != ' ') {
 		if (*s == '"' || *s == '\'') {
-			size = strlen (s) - 1U;
+			const size_t	size = strlen (s) - 1U;
 			/* Ignore if improperly quoted */
 			if (s[0] == s[size]) {
 				q = s;
@@ -1581,6 +1659,7 @@ _as:		| AS ;
 _format:	| FORMAT ;
 _is:		| IS ;
 _printing:	| PRINTING ;
+_on:		| ON ;
 _than:		| THAN ;
 _to:		| TO ;
 

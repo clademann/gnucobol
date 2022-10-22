@@ -1,7 +1,7 @@
 #
 # gnucobol/tests/cobol85/report.pl
 #
-# Copyright (C) 2001-2012, 2016-2020 Free Software Foundation, Inc.
+# Copyright (C) 2001-2012, 2016-2022 Free Software Foundation, Inc.
 # Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart
 #
 # This file is part of GnuCOBOL.
@@ -44,6 +44,7 @@ my $compile_module;
 my $force_cobcrun = 0;
 
 my $cobc = $ENV{"COBC"};
+my $cobol_flags= $ENV{"COBOL_FLAGS"};
 my $cobcrun = $ENV{"COBCRUN"};
 my $cobcrun_direct = $ENV{"COBCRUN_DIRECT"};
 
@@ -62,6 +63,10 @@ if (defined $opt) {
 	$opt = "-std=cobol85 $opt"
 } else {
 	$opt = "-std=cobol85"
+}
+
+if (defined $cobol_flags ) {
+	$opt = "$cobol_flags $opt"
 }
 
 if (defined $cobc) {
@@ -419,7 +424,9 @@ testrepeat:
 		$ret = system ("$TRAP  $cmd > $exe.out 2>/dev/null");
 	}
 
-	if ($ret != 0 && !($ret >> 2 && $to_kill{$exe})) {
+	# extra check for both SIGINT as masked signal and as plain return, because
+	# AIX (at least 7.1 with GCC 4.2 and system libc) directly returns 2
+	if ($ret != 0 && !($to_kill{$exe} && ($ret >> 2 || $ret == 2))) {
 		if (($ret >> 8) == 77) {
 			die "Interrupted\n";
 		}

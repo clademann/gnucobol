@@ -118,10 +118,11 @@ enum cb_tag {
 	CB_TAG_DECIMAL_LITERAL,	/* 39 Decimal Literal */
 	CB_TAG_REPORT_LINE,	/* 40 Report line description */
 	CB_TAG_ML_SUPPRESS,	/* 41 JSON/XML GENERATE SUPPRESS clause */
-	CB_TAG_ML_TREE,	/* 42 JSON/XML GENERATE output tree */
-	CB_TAG_ML_SUPPRESS_CHECKS	/* 43 JSON/XML GENERATE SUPPRESS checks */
+	CB_TAG_ML_TREE,		/* 42 JSON/XML GENERATE output tree */
+	CB_TAG_ML_SUPPRESS_CHECKS,	/* 43 JSON/XML GENERATE SUPPRESS checks */
+	CB_TAG_VARY			/* 44 Report line description */
 	/* When adding a new entry, please remember to add it to
-	   cobc_enum_explain as well. */
+	   cb_enum_explain in tree.c as well. */
 };
 
 /* Alphabet target */
@@ -526,6 +527,13 @@ typedef struct cb_tree_common	*cb_tree;
 #define CB_TREE_CLASS(x)	cb_tree_class (CB_TREE (x))
 #define CB_TREE_CATEGORY(x)	cb_tree_category (CB_TREE (x))
 
+#define CB_TREE_TAG_UNEXPECTED_ABORT(x)	\
+	do { /* not translated as unexpected dev-only message */ \
+		cobc_err_msg ("unexpected tree tag: %s",	\
+			cb_enum_explain (CB_TREE_TAG (x))); 	\
+		COBC_ABORT ();		\
+	} ONCE_COB
+
 #define	CB_VALID_TREE(x)	(x && CB_TREE (x) != cb_error_node)
 #define	CB_INVALID_TREE(x)	(!(x) || CB_TREE (x) == cb_error_node)
 
@@ -747,6 +755,9 @@ struct cb_literal {
 #define CB_NUMERIC_LITERAL_P(x) \
   (CB_LITERAL_P (x) && CB_TREE_CATEGORY (x) == CB_CATEGORY_NUMERIC)
 
+#define CB_ERR_LITMAX 38
+extern char		*literal_for_diagnostic (char *buff, const char *literal_data);
+
 /* Decimal */
 
 struct cb_decimal {
@@ -771,11 +782,10 @@ struct cb_picture {
 	enum cb_category	category;	/* Field category */
 	cob_u32_t		digits;		/* Number of digit places */
 	int			scale;		/* 1/10^scale */
-#if 0 /* currently unused */
 	cob_u32_t		real_digits;	/* Real number of digits */
-#endif
 	cob_u32_t		have_sign;	/* Have 'S' */
 	unsigned int flag_is_calculated	: 1;	/* is calculated */
+	unsigned int flag_has_p	: 1;	/* Has PPs in PICTURE */
 };
 
 #define CB_PICTURE(x)	(CB_TREE_CAST (CB_TAG_PICTURE, struct cb_picture, x))
@@ -789,6 +799,18 @@ struct cb_key {
 	cb_tree	val;			/* Value to be compared in SEARCH ALL */
 	int	dir;			/* ASCENDING or DESCENDING */
 };
+
+/* REPORT:  VARYING var FROM exp BY exp */
+
+struct cb_vary {
+	struct cb_tree_common	common;		/* Common values */
+	cb_tree		var;					/* Variable name being VARYed */
+	cb_tree		from;					/* Starting value */
+	cb_tree		by;						/* Increment value */
+};
+
+#define CB_VARY(x)	(CB_TREE_CAST (CB_TAG_VARY, struct cb_vary, x))
+#define CB_VARY_P(x)	(CB_TREE_TAG (x) == CB_TAG_VARY)
 
 /* Field */
 
@@ -836,9 +858,7 @@ struct cb_field {
 	cb_tree			report_control;	/* CONTROL identifier */
 	cb_tree			report_when;	/* PRESENT WHEN condition */
 	cb_tree			report_column_list;/* List of Column Numbers */
-	cb_tree			report_vary_var;/* VARYING identifier */
-	cb_tree			report_vary_from;/* VARYING FROM arith */
-	cb_tree			report_vary_by;	/* VARYING BY arith */
+	cb_tree			report_vary_list;/* VARYING identifier */
 	const char		*report_source_txt;	/* SOURCE as text string */
 	const char		*report_field_name;	/* Name used for this REPORT field */
 	struct cb_field	*report_field_from;	/* 'field' used as SOURCE */
@@ -1129,6 +1149,7 @@ struct cb_file {
            EXTERNAL/DYNAMIC/USING/... word" */
 	unsigned int		flag_assign_no_keyword : 1;
 	unsigned int		flag_has_organization : 1;	/* ORGANIZATION was declared */
+	unsigned int		flag_primary_dups : 1;	/* PRIMARY key has DUPLICATES */
 };
 
 #define CB_FILE(x)	(CB_TREE_CAST (CB_TAG_FILE, struct cb_file, x))
@@ -1154,7 +1175,7 @@ struct cb_word {
 	const char	*name;		/* Word name */
 	cb_tree		items;		/* Objects associated with this word */
 	int		count;		/* Number of words with the same name */
-	int		error;		/* Set to 1 if error detected */
+	int		error;		/* Set to -1 if warning raised for that, -1 if error detected */
 };
 
 #define CB_WORD_TABLE_SIZE	(CB_WORD_HASH_SIZE * sizeof (struct cb_word))
@@ -1167,6 +1188,7 @@ struct cb_reference {
 	cb_tree			offset;		/* Reference mod offset */
 	cb_tree			length;		/* Reference mod length */
 	cb_tree			check;		/* Runtime checks */
+	enum cob_statement	statement;	/* statement that uses this reference */
 	struct cb_word		*word;		/* Pointer to word list */
 	struct cb_label		*section;	/* Current section */
 	struct cb_label		*paragraph;	/* Current paragraph */
@@ -1176,7 +1198,6 @@ struct cb_reference {
 	unsigned int		flag_receiving	: 1;	/* Reference target */
 	unsigned int		flag_all	: 1;	/* ALL */
 	unsigned int		flag_in_decl	: 1;	/* In DECLARATIVE */
-	unsigned int		flag_decl_ok	: 1;	/* DECLARATIVE ref OK  */
 	unsigned int		flag_alter_code	: 1;	/* Needs ALTER code */
 	unsigned int		flag_debug_code	: 1;	/* Needs DEBUG code */
 	unsigned int		flag_all_debug	: 1;	/* Needs ALL DEBUG code */
@@ -1386,7 +1407,7 @@ struct cb_if {
 	cb_tree			test;		/* Condition */
 	cb_tree			stmt1;		/* Statement list */
 	cb_tree			stmt2;		/* ELSE/WHEN statement list */
-	unsigned int		is_if;		/* From IF (1), WHEN (0), PRESENT WHEN (3+4) */
+	enum cob_statement statement;	/* statement IF/WHEN/PRESENT WHEN */
 };
 
 #define CB_IF(x)		(CB_TREE_CAST (CB_TAG_IF, struct cb_if, x))
@@ -1452,7 +1473,7 @@ enum cb_handler_type {
 
 struct cb_statement {
 	struct cb_tree_common	common;			/* Common values */
-	const char		*name;			/* Statement name */
+	enum cob_statement	statement;		/* Statement */
 	cb_tree			body;			/* Statement body */
 	cb_tree			file;			/* File reference */
 	cb_tree			ex_handler;		/* Exception handler */
@@ -1539,33 +1560,37 @@ struct cb_report {
 	cb_tree			line_counter;	/* LINE-COUNTER */
 	cb_tree			page_counter;	/* PAGE-COUNTER */
 	cb_tree			code_clause;	/* CODE */
-	cb_tree			controls;	/* CONTROLS */
-	cb_tree			t_lines;	/* PAGE LIMIT LINES */
-	cb_tree			t_columns;	/* PAGE LIMIT COLUMNS */
-	cb_tree			t_heading;	/* HEADING */
+	cb_tree			controls;		/* CONTROLS */
+	cb_tree			t_lines;		/* PAGE LIMIT LINES */
+	cb_tree			t_columns;		/* PAGE LIMIT COLUMNS */
+	cb_tree			t_heading;		/* HEADING */
 	cb_tree			t_first_detail;	/* FIRST DE */
 	cb_tree			t_last_control;	/* LAST CH */
 	cb_tree			t_last_detail;	/* LAST DE */
-	cb_tree			t_footing;	/* FOOTING */
-	int			lines;		/* PAGE LIMIT LINES */
-	int			columns;	/* PAGE LIMIT COLUMNS */
-	int			heading;	/* HEADING */
-	int			first_detail;	/* FIRST DE */
-	int			last_control;	/* LAST CH */
-	int			last_detail;	/* LAST DE */
-	int			footing;	/* FOOTING */
+	cb_tree			t_footing;		/* FOOTING */
+	struct cb_field	*t_heading_final;/* CONTROL HEADING FINAL */
+	struct cb_field	*t_footing_final;/* CONTROL FOOTING FINAL */
+	int			lines;				/* PAGE LIMIT LINES */
+	int			columns;			/* PAGE LIMIT COLUMNS */
+	int			heading;			/* HEADING */
+	int			first_detail;		/* FIRST DE */
+	int			last_control;		/* LAST CH */
+	int			last_detail;		/* LAST DE */
+	int			footing;			/* FOOTING */
 	struct cb_field		*records;	/* First record definition of report */
-	int			num_lines;	/* Number of Lines defined */
+	int			num_lines;			/* Number of Lines defined */
 	struct cb_field		**line_ids;	/* array of LINE definitions */
-	int			num_sums;	/* Number of SUM counters defined */
+	int			num_sums;			/* Number of SUM counters defined */
 	struct cb_field		**sums;		/* Array of SUM fields */
-	int			rcsz;		/* Longest record */
-	int			id;		/* unique id for this report */
+	int			rcsz;				/* Longest record */
+	int			id;					/* unique id for this report */
+	int			sum_exec;			/* Id for computing SUM values */
 	unsigned int		control_final:1;/* CONTROL FINAL declared */
 	unsigned int		global:1;	/* IS GLOBAL declared */
 	unsigned int		has_declarative:1;/* Has Declaratives Code to be executed */
 	unsigned int		has_detail:1;	/* Has DETAIL line */
 	unsigned int		has_source_move:1;/* Has Code to MOVE SOURCE values */
+	unsigned int		was_checked:1;
 };
 
 #define CB_REPORT(x)	(CB_TREE_CAST (CB_TAG_REPORT, struct cb_report, x))
@@ -1649,6 +1674,7 @@ struct cb_program {
 	cb_tree			locale_list;		/* LOCALE list */
 	cb_tree			global_list;		/* GLOBAL list */
 	cb_tree			report_list;		/* REPORT list */
+	cb_tree			perform_thru_list;		/* list of PERFORM THRU */
 	cb_tree			alter_list;		/* ALTER list */
 	cb_tree			debug_list;		/* DEBUG ref list */
 	cb_tree			cb_return_code;		/* RETURN-CODE */
@@ -1847,6 +1873,8 @@ extern cb_tree			cb_depend_check;
 
 extern unsigned int		gen_screen_ptr;
 
+extern const char *cb_statement_name[STMT_MAX_ENTRY];
+
 extern char			*cb_name (cb_tree);
 extern char			*cb_name_errmsg (cb_tree);
 extern cb_tree			cb_exhbit_literal (cb_tree);
@@ -1892,7 +1920,6 @@ extern cb_tree			cb_build_decimal (const unsigned int);
 extern cb_tree			cb_build_decimal_literal (const int);
 extern int			cb_lookup_literal (cb_tree x, int make_decimal);
 
-extern cb_tree			cb_build_picture (const char *);
 extern cb_tree			cb_build_comment (const char *);
 extern cb_tree			cb_build_direct (const char *,
 						 const unsigned int);
@@ -1900,11 +1927,13 @@ extern cb_tree			cb_build_debug (const cb_tree, const char *,
 						const cb_tree);
 extern cb_tree			cb_build_debug_call (struct cb_label *);
 
+extern struct cb_picture	*cb_build_picture (const char *);
 extern struct cb_picture	*cb_build_binary_picture (const char *,
 							  const cob_u32_t,
 							  const cob_u32_t);
 
 extern cb_tree			cb_build_field (cb_tree);
+extern cb_tree			cb_build_vary (cb_tree, cb_tree, cb_tree);
 extern cb_tree			cb_build_implicit_field (cb_tree, const int);
 extern cb_tree			cb_build_constant (cb_tree, cb_tree);
 extern int			cb_build_generic_register (const char *, const char *, struct cb_field **);
@@ -1985,13 +2014,13 @@ extern cb_tree			cb_build_cancel (const cb_tree);
 extern cb_tree			cb_build_goto (const cb_tree, const cb_tree);
 
 extern cb_tree			cb_build_if (const cb_tree, const cb_tree,
-					     const cb_tree, const unsigned int);
+					     const cb_tree, const enum cob_statement);
 
 extern cb_tree			cb_build_perform (const enum cb_perform_type);
 extern cb_tree			cb_build_perform_varying (cb_tree, cb_tree,
 							  cb_tree, cb_tree);
 
-extern struct cb_statement	*cb_build_statement (const char *);
+extern struct cb_statement	*cb_build_statement (enum cob_statement);
 
 extern cb_tree			cb_build_continue (void);
 
@@ -2000,6 +2029,7 @@ extern cb_tree			cb_list_add (cb_tree, cb_tree);
 extern cb_tree			cb_pair_add (cb_tree, cb_tree, cb_tree);
 extern cb_tree			cb_list_append (cb_tree, cb_tree);
 extern cb_tree			cb_list_reverse (cb_tree);
+extern cb_tree 			cb_list_entry (cb_tree, int);
 extern unsigned int		cb_list_length (cb_tree);
 extern unsigned int		cb_next_length (struct cb_next_elem *);
 
@@ -2010,7 +2040,7 @@ extern struct cb_field		*get_sum_data_field(struct cb_report *r, struct cb_field
 
 extern void			cb_add_common_prog (struct cb_program *);
 extern void			cb_insert_common_prog (struct cb_program *,
-						       struct cb_program *);
+						   struct cb_program *);
 
 
 extern struct cb_intrinsic_table	*lookup_intrinsic (const char *,
@@ -2019,17 +2049,18 @@ extern struct cb_intrinsic_table	*lookup_intrinsic (const char *,
 extern cb_tree		cb_build_alphabet_name (cb_tree);
 
 extern cb_tree		cb_build_initialize (const cb_tree, const cb_tree,
-					     const cb_tree,
-					     const unsigned int,
-					     const unsigned int,
-					     const unsigned int);
+					   const cb_tree,
+					   const unsigned int,
+					   const unsigned int,
+					   const unsigned int);
 
 struct cb_literal	*build_literal (enum cb_category,
-					const void *,
-					const size_t);
+					   const void *, const size_t);
 
-extern cb_tree	cb_build_system_name (const enum cb_system_name_category,
-				      const int);
+extern cb_tree		cb_build_system_name (const enum cb_system_name_category,
+					   const int);
+
+extern const char	*cb_enum_explain (const enum cb_tag);
 
 extern const char	*cb_get_usage_string (const enum cb_usage);
 
@@ -2045,12 +2076,13 @@ extern cb_tree		cb_build_ml_suppress_checks (struct cb_ml_generate_tree *);
 
 
 /* parser.y */
-extern cb_tree		cobc_printer_node;
 extern int		non_const_word;
 extern int		suppress_data_exceptions;
 extern unsigned int	cobc_repeat_last_token;
 extern unsigned int	cobc_in_id;
 extern unsigned int	cobc_in_procedure;
+extern unsigned int	cobc_in_data_division;
+extern unsigned int	cobc_in_usage;
 extern unsigned int	cobc_in_repository;
 extern unsigned int	cobc_force_literal;
 extern unsigned int	cobc_cs_check;
@@ -2073,27 +2105,31 @@ extern void			cb_list_system_names (void);
 extern void			cb_list_registers (void);
 extern void			cb_list_system_routines (void);
 extern int			cb_list_map (cb_tree (*) (cb_tree), cb_tree);
-extern void			cb_strncpy_upper (char *, const char * const, const size_t);
+extern void			cb_memcpy_upper (char *, const char * const, size_t);
 
 /* error.c */
-extern void		cb_warning_x (const enum cb_warn_opt, cb_tree, const char *, ...) COB_A_FORMAT34;
-extern void		cb_warning_dialect_x (const enum cb_support, cb_tree, const char *, ...) COB_A_FORMAT34;
+extern cb_tree			get_cb_error_node (void);
+extern enum cb_warn_val		cb_warning_x (const enum cb_warn_opt, cb_tree, const char *, ...) COB_A_FORMAT34;
+extern enum cb_warn_val		cb_warning_dialect_x (const enum cb_support, cb_tree, const char *, ...) COB_A_FORMAT34;
 extern void		cb_note_x (const enum cb_warn_opt, cb_tree, const char *, ...) COB_A_FORMAT34;
 extern void		cb_inclusion_note (const char *, int);
-extern void		cb_error_x (cb_tree, const char *, ...) COB_A_FORMAT23;
+extern char		*cb_get_qualified_name (const struct cb_reference *);
+extern enum cb_warn_val	cb_error_x (cb_tree, const char *, ...) COB_A_FORMAT23;
 extern unsigned int	cb_verify (const enum cb_support, const char *);
-extern unsigned int	cb_verify_x (cb_tree, const enum cb_support,
+extern unsigned int	cb_verify_x (const cb_tree, const enum cb_support,
 				     const char *);
+#if 0 /* CHECKME: Is there any place other than "note" where we want to do listing suppression? */
 extern void		listprint_suppress (void);
 extern void		listprint_restore (void);
+#endif
 
-extern void		redefinition_error (cb_tree);
-extern void		redefinition_warning (cb_tree, cb_tree);
-extern void		undefined_error (cb_tree);
-extern void		ambiguous_error (cb_tree);
-extern void		group_error (cb_tree, const char *);
-extern void		level_require_error (cb_tree, const char *);
-extern void		level_except_error (cb_tree, const char *);
+extern enum cb_warn_val		redefinition_error (cb_tree);
+extern enum cb_warn_val		redefinition_warning (cb_tree, cb_tree);
+extern enum cb_warn_val		undefined_error (cb_tree);
+extern enum cb_warn_val		ambiguous_error (cb_tree);
+extern enum cb_warn_val		group_error (cb_tree, const char *);
+extern enum cb_warn_val		level_require_error (cb_tree, const char *);
+extern enum cb_warn_val		level_except_error (cb_tree, const char *);
 extern int		cb_set_ignore_error (int state);
 
 /* sqlxfdgen.c */

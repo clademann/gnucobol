@@ -1,4 +1,25 @@
 
+2022-10-11  Simon Sobisch <simonsobisch@gnu.org>
+
+	* Makefile.module.in: added and adjusted clean targets
+
+2022-10-04  Simon Sobisch <simonsobisch@gnu.org>
+
+	* Makefile.am, Makefile.module.in: added targets test-local (compile + run
+	  with installed/active installation) and test-local-compat (compile with
+	  installed/active installation, run with version in top_builddir)
+
+2022-04-11  Simon Sobisch <simonsobisch@gnu.org>
+
+	* report.pl: add COBOL_FLAGS from environment to cobc command line
+	  as done for the internal testsuite
+
+2021-12-30  Simon Sobisch <simonsobisch@gnu.org>
+
+	* report.pl: check for SIGINT also unmasked (as seen on AIX)
+	* Makefile.am: improved support for make implementations without the
+	  POSIX 2001 special target .PHONY; always use $(RM)
+
 2020-11-30  Simon Sobisch <simonsobisch@gnu.org>
 
 	* Makefile.am: (newcob.val.Z, newcob.val.tar.gz): raise error message
@@ -345,7 +366,7 @@
 	* SQ.txt, summary.txt : We now pass the LINAGE tests
 
 
-Copyright 2005-2010,2015-2020 Free Software Foundation, Inc.
+Copyright 2005-2010,2015-2020,2022 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification, are
 permitted provided the copyright notice and this notice are preserved.

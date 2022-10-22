@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -18,7 +18,17 @@
    along with GnuCOBOL.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "fileio.h"
+
+/* the common build system only compiles this file if any isam is to be included
+   and _includes_ this file via libcob*.c instead of compiling it,
+   but legacy hard-wired ones like VS need this "all file" check) */
+#if	defined(WITH_CISAM) || defined(WITH_DISAM) || defined(WITH_VBISAM) || defined(WITH_VISAM)
+
 #if defined(IS_ISAM_LIB)
+/* the common way to use this source is one library for each configured
+   ISAM handler, depending on FOR_xISAM defines in the build system
+   --> drop all but the currently active WITH_ defines */
 #ifdef WITH_CISAM
 #undef WITH_CISAM
 #endif
@@ -34,15 +44,9 @@
 
 #ifdef FOR_CISAM
 #define WITH_CISAM
-#ifdef VB_RTD
-#undef VB_RTD
-#endif
 #endif
 #ifdef FOR_DISAM
 #define WITH_DISAM
-#ifdef VB_RTD
-#undef VB_RTD
-#endif
 #endif
 #ifdef FOR_VBISAM
 #define WITH_VBISAM
@@ -52,11 +56,6 @@
 #endif
 #endif
 
-#include "fileio.h"
-
-#if defined(IS_ISAM_LIB) || defined(WITH_STATIC_ISAM)
-
-#if	defined(WITH_CISAM) || defined(WITH_DISAM) || defined(WITH_VBISAM) || defined(WITH_VISAM)
 #define ISRECNUM isrecnum
 #define ISERRNO  iserrno
 #define ISRECLEN isreclen
@@ -72,80 +71,43 @@
 #define cobsetptr	isam_setptr
 static	cob_global		*isam_globptr;
 static	cob_settings	*isam_setptr;
-#define	COB_WITH_STATUS_02
 #if defined(WITH_VBISAM) && defined(WITH_DISAM)
 #undef WITH_DISAM
 #endif
 
+/* C-ISAM specifics */
 #if	defined(WITH_CISAM)
 #include <isam.h>
 #define	isfullclose(x)	isclose (x)
+#define	COB_WITH_STATUS_02
 
+/* D-ISAM specifics */
 #elif	defined(WITH_DISAM)
 #define	isfullclose(x)	isclose (x)
+/* current D-ISAM */
 #if defined(HAVE_ISCONFIG_H) && defined(HAVE_ISINTSTD_H)
 #include <isconfig.h>
-#ifndef ISCOBOL_STATS
-#undef	COB_WITH_STATUS_02
-#endif
 #if defined(HAVE_ISWRAP_H)
 #include <iswrap.h>
 #endif
 #ifdef ISMAXKEY
-#ifdef MAXKEYLEN
-#undef MAXKEYLEN
-#endif
 #define MAXKEYLEN ISMAXKEY
 #endif
-#if ( ISCOBOL & ISCOBOL_STATS )
+#if defined (ISCOBOL_STATS) && (ISCOBOL & ISCOBOL_STATS)
+/* the additional status is a configurable feature with DISAM */
 #ifndef COB_WITH_STATUS_02 
 #define	COB_WITH_STATUS_02
 #endif
 #endif
 
-#else
-/* Old version of DISAM */
+#else   /* old version of DISAM */
 #include <disam.h>
-#ifdef COB_WITH_STATUS_02 
-#undef	COB_WITH_STATUS_02
-#endif
+/* isstat1 / isstat2 implementation unclear */
 #endif
 
-#elif	defined(WITH_VBISAM)
-#include <vbisam.h>
-#if defined(COB_WITH_STATUS_02) && !defined(VBISAM_VERSION)
-/* Old VBISAM! (2.2 supports the 02 status) */
-#undef	COB_WITH_STATUS_02
-#endif
-#ifdef VB_MAX_KEYLEN
-#ifndef MAXKEYLEN
-#define MAXKEYLEN VB_MAX_KEYLEN
-#endif
-#endif
-#if defined(VB_RTD)
-/* Since VBISAM 2.1.1: access to isrecnum iserrno etc is no longer global */
-static	vb_rtd_t *vbisam_rtd = NULL;
-
-#undef ISRECNUM 
-#undef ISERRNO 
-#undef ISRECLEN
-#undef ISSTAT1
-#undef ISSTAT2
-#define ISRECNUM vbisam_rtd->isrecnum
-#define ISERRNO  vbisam_rtd->iserrno
-#define ISRECLEN vbisam_rtd->isreclen
-#if defined(VBISAM_VERSION)
-#ifndef COB_WITH_STATUS_02 
-#define	COB_WITH_STATUS_02
-#endif
-#define ISSTAT1 vbisam_rtd->isstat1
-#define ISSTAT2 vbisam_rtd->isstat2
-#endif
-#endif
-
+/* V-ISAM specifics (updated free VBISAM) */
 #elif	defined(WITH_VISAM)
 #include <visam.h>
-/* VBISAM 2.2: access to isrecnum iserrno etc is global */
 #ifdef VB_MAX_KEYLEN
 #ifdef MAXKEYLEN
 #undef MAXKEYLEN
@@ -156,18 +118,44 @@ static	vb_rtd_t *vbisam_rtd = NULL;
 #undef VB_RTD
 #endif
 #if defined(ISVARLEN)
+/* Does not work well with V-ISAM */
 #undef ISVARLEN
 #endif
-#if defined(VBISAM_VERSION) && !defined(COB_WITH_STATUS_02)
-#define	COB_WITH_STATUS_02
+#if !defined(COB_WITH_STATUS_02)
+#define COB_WITH_STATUS_02
+#endif               
+
+
+/* VBISAM specifics (either "old" one or updated, or VBISAM 2.2) */
+#elif	defined(WITH_VBISAM)
+#include <vbisam.h>
+#if defined(VBISAM_VERSION)
+#define	COB_WITH_STATUS_02 /* new VBISAM (2.2+ supports the 02 status) */
+#endif
+#ifdef VB_MAX_KEYLEN
+#define MAXKEYLEN VB_MAX_KEYLEN
 #endif
 
+/* Since VBISAM 2.1.1: access to isrecnum iserrno etc is no longer global */
+#if defined(VB_RTD)
+static	vb_rtd_t *vbisam_rtd = NULL;
+#undef ISRECNUM 
+#define ISRECNUM vbisam_rtd->isrecnum
+#undef ISERRNO 
+#define ISERRNO  vbisam_rtd->iserrno
+#undef ISRECLEN
+#define ISRECLEN vbisam_rtd->isreclen
+#undef ISSTAT1
+#define ISSTAT1 vbisam_rtd->isstat1
+#undef ISSTAT2
+#define ISSTAT2 vbisam_rtd->isstat2
+#endif
+#endif
+
+#if (ISEXTENDED == 1)
+#define ISPID ispid
 #else
-#error ISAM type undefined
-#endif
-
-#ifndef MAXKEYLEN
-#define MAXKEYLEN 240
+#define ISPID 0
 #endif
 
 #ifndef ISVARLEN
@@ -176,6 +164,10 @@ static	vb_rtd_t *vbisam_rtd = NULL;
 #endif
 
 /**********************************************************************/
+
+#ifndef MAXKEYLEN
+#define MAXKEYLEN 240
+#endif
 
 #ifndef MAXNUMKEYS
 #define MAXNUMKEYS 32
@@ -666,7 +658,7 @@ static COB_INLINE COB_A_INLINE void
 get_isreclen (cob_file *f)
 {
 	if (f->record_min != f->record_max) {
-#if !defined(ISVARLEN) || (ISVARLEN == 0)
+#if ISVARLEN == 0
 		/* This ISAM is not supporting Variable length so simulate using trailling NULs */
 		int k;
 		if (f->variable_record) {
@@ -690,7 +682,7 @@ set_isreclen (cob_file *f)
 {
 	if (f->record_min != f->record_max) {
 		ISRECLEN = f->record->size;
-#if !defined(ISVARLEN) || (ISVARLEN == 0)
+#if ISVARLEN == 0
 		/* This ISAM is not supporting Variable length so simulate using trailling NULs */
 		if (f->record->size < f->record_max)
 			memset(&f->record->data[f->record->size], 0, f->record_max - f->record->size);
@@ -790,6 +782,11 @@ isread_retry(cob_file *f, void *data, int mode)
 			cob_sleep_msec(interval);
 		}
 	} while(sts != 0 && retry != 0);
+	if (ISERRNO == ELOCKED
+	 || ISERRNO == EDEADLK
+	 || ISERRNO == EFLOCKED) {
+		f->blockpid = ISPID;
+	}
 	return sts;
 }
 
@@ -831,22 +828,22 @@ isam_version (void)
 		max_keycomp = ISMAXPARTS;
 #endif
 #if defined(WITH_CISAM)
-	ln = sprintf(msg,"C-ISAM");
+	ln = sprintf(msg, "C-ISAM");
 #elif defined(WITH_DISAM)
-	ln = sprintf(msg,"D-ISAM %s",isversnumber);
+	ln = sprintf(msg, "D-ISAM %s",isversnumber);
 #elif defined(WITH_VBISAM)
 #ifdef VBISAM_VERSION
-	ln = sprintf(msg,"VB-ISAM %s",VBISAM_VERSION);
+	ln = sprintf(msg, "VBISAM %s",VBISAM_VERSION);
 #elif defined  (VB_RTD)
-	ln = sprintf(msg,"VB-ISAM (RTD)");
+	ln = sprintf(msg, "VBISAM (RTD)");
 #else
-	ln = sprintf(msg,"VB-ISAM");
+	ln = sprintf(msg, "VBISAM");
 #endif
 #elif defined(WITH_VISAM)
 #ifdef VISAM_VERSION
-	ln = sprintf(msg,"V-ISAM %s ",VISAM_VERSION);
+	ln = sprintf(msg, "V-ISAM %s",VISAM_VERSION);
 #else
-	ln = sprintf(msg,"VB-CISAM (May not work!)");
+	ln = sprintf(msg, "V-ISAM in C-ISAM mode");
 #endif
 #endif
 	if (max_keycomp < COB_MAX_KEYCOMP)
@@ -933,14 +930,14 @@ isam_open (cob_file_api *a, cob_file *f, char *filename, const int mode, const i
 	} else {
 		unsigned char	idxhdr[32];
 		int		idxsz;
-		/* The file already exists and if it is VB-ISAM format then retain that */
+		/* The file already exists and if it is VBISAM format then retain that */
 		isfd = open (a->file_open_buff, 0);
 		if (isfd >= 0
 		 && read (isfd, (void*)idxhdr, 32) == 32) {
 			if (idxhdr[0] == 'V'
 			 && idxhdr[1] == 'B'
 			 && idxhdr[2] == 0x02
-			 && idxhdr[3] == 0x02) {	/* VB-ISAM signature */
+			 && idxhdr[3] == 0x02) {	/* VBISAM signature */
 				fmode = ISMVBISAM;
 				if (f->isam_idxsz > 0) {
 					fmode |= f->isam_idxsz << ISMIDXSHIFT;
@@ -987,7 +984,7 @@ isam_open (cob_file_api *a, cob_file *f, char *filename, const int mode, const i
 	errno = 0;
 #if defined(WITH_DISAM) || defined(WITH_VISAM)
 	if (access (a->file_open_buff, checkvalue)
-	&& (errno == ENOENT) ) {	/* D-ISAM/V-ISAM will handle files with MF naming style */
+	&& (errno == ENOENT) ) {	/* DISAM/V-ISAM will handle files with MF naming style */
 		errno = 0;
 		snprintf (a->file_open_buff, (size_t)COB_FILE_MAX, "%s", filename);
 #ifdef ISMNODAT
@@ -1012,12 +1009,13 @@ isam_open (cob_file_api *a, cob_file *f, char *filename, const int mode, const i
 	ret = COB_STATUS_00_SUCCESS;
 	omode = 0;
 	lmode = 0;
-	vmode = 0;
 	dobld = 0;
 	isfd = -1;
 	if (f->record_min != f->record_max) {
 		vmode = ISVARLEN;
 		ISRECLEN = f->record_min;
+	} else {
+		vmode = 0;
 	}
 
 #ifdef ISSYNCWR
@@ -1251,7 +1249,7 @@ dobuild:
 #ifndef COB_WITH_STATUS_02
 	if (f->flag_read_chk_dups) {
 		int k;
-		for (k = 1; k < f->nkeys; ++k) {
+		for (k = 0; k < f->nkeys; ++k) {
 			if ((fh->key[k].k_flags & ISDUPS))
 				break;
 		}
@@ -1393,6 +1391,7 @@ isam_read (cob_file_api *a, cob_file *f, cob_field *key, const int read_opts)
 	int			lmode;
 
 	fh = f->file;
+	f->blockpid = 0;
 	fh->eofpending = 0;
 	fh->startiscur = 0;
 	fh->wrkhasrec = 0;
@@ -1778,7 +1777,7 @@ isam_write (cob_file_api *a, cob_file *f, const int opt)
 	if (f->flag_read_chk_dups) {
 		int k;
 		savefileposition (f);
-		for (k = 1; k < f->nkeys; ++k) {
+		for (k = 0; k < f->nkeys; ++k) {
 			if (fh->key[k].k_flags & ISDUPS) {
 				memcpy (fh->recwrk, f->record->data, f->record_max);
 				isstart (fh->isfd, &fh->key[k], fh->key[k].k_len, 
@@ -1927,7 +1926,7 @@ isam_rewrite (cob_file_api *a, cob_file *f, const int opt)
 		fh->duprecnum = ISRECNUM;
 		if (fh->recorg != NULL)
 			memcpy (fh->recorg, fh->recwrk, f->record_max);
-		for (k = 1; k < f->nkeys && ret == COB_STATUS_00_SUCCESS; ++k) {
+		for (k = 0; k < f->nkeys && ret == COB_STATUS_00_SUCCESS; ++k) {
 			if (fh->key[k].k_flags & ISDUPS) {
 #ifndef COB_WITH_STATUS_02
 				if (f->flag_read_chk_dups
@@ -1956,16 +1955,17 @@ isam_rewrite (cob_file_api *a, cob_file *f, const int opt)
 				}
 #endif
 				ret = COB_STATUS_00_SUCCESS;
-				continue;
-			}
-			memcpy (fh->recwrk, f->record->data, f->record_max);
-			ISERRNO = 0;
-			isstart (fh->isfd, &fh->key[k], fh->key[k].k_len, (void *)fh->recwrk, ISEQUAL);
-			if (ISERRNO == 0
-			 && isread (fh->isfd, (void *)fh->recwrk, ISEQUAL) == 0
-			 && ISRECNUM != fh->recnum) {
-				ret = COB_STATUS_22_KEY_EXISTS;
-				break;
+			} else 
+			if (k > 0) {
+				memcpy (fh->recwrk, f->record->data, f->record_max);
+				ISERRNO = 0;
+				isstart (fh->isfd, &fh->key[k], fh->key[k].k_len, (void *)fh->recwrk, ISEQUAL);
+				if (ISERRNO == 0
+				 && isread (fh->isfd, (void *)fh->recwrk, ISEQUAL) == 0
+				 && ISRECNUM != fh->recnum) {
+					ret = COB_STATUS_22_KEY_EXISTS;
+					break;
+				}
 			}
 		}
 		if (ret == COB_STATUS_00_SUCCESS) {
@@ -2054,15 +2054,15 @@ cob_isam_init_fileio (cob_file_api *a)
 	a->io_funcs[COB_IO_VISAM] = (void*) &ext_indexed_funcs;
 	isam_name = "V-ISAM";
 #ifdef VB_RTD
-	if (vbisam_rtd == NULL) {	/* VB-ISAM 2.2 run-time pointer */
+	if (vbisam_rtd == NULL) {	/* VBISAM 2.2 run-time pointer */
 		vbisam_rtd = VB_GET_RTD;
 	}
 #endif
 #elif defined(WITH_VBISAM)
 	a->io_funcs[COB_IO_VBISAM] = (void*) &ext_indexed_funcs;
-	isam_name = "VB-ISAM";
+	isam_name = "VBISAM";
 #ifdef VB_RTD
-	if (vbisam_rtd == NULL) {	/* VB-ISAM 2.1.1 run-time pointer */
+	if (vbisam_rtd == NULL) {	/* VBISAM 2.1.1 run-time pointer */
 		vbisam_rtd = VB_GET_RTD;
 	}
 #endif
@@ -2071,5 +2071,4 @@ cob_isam_init_fileio (cob_file_api *a)
 	isam_setptr = a->setptr;
 }
 
-#endif
 #endif

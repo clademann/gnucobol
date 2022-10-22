@@ -1,4 +1,4 @@
-## Copyright (C) 2007-2012, 2014-2021 Free Software Foundation, Inc.
+## Copyright (C) 2007-2012, 2014-2022 Free Software Foundation, Inc.
 ## Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart,
 ## Ron Norman
 ##
@@ -1496,7 +1496,6 @@ prog.cob:49: error: 'SWIT1-ON' is not defined
 prog.cob:56: error: 'SWIT2-ON' is not defined
 prog.cob:63: error: 'SWITCH-B' is not defined
 prog.cob:63: error: syntax error, unexpected OFF
-prog.cob:64: error: 'SWIT2-ON' is not defined
 prog.cob:70: error: 'SWIT26-ON' is not defined
 prog.cob:76: error: 'SWIT32-OFF' is not defined
 ])
@@ -1814,6 +1813,39 @@ prog.cob:8: warning: source text exceeds 512 bytes, will be truncated
 prog.cob:8: error: unknown statement 'This'
 ])
 
+AT_CLEANUP
+
+
+AT_SETUP([missing newline in fixed-form / free-form])
+AT_KEYWORDS([misc])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      prog.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       PROCEDURE        DIVISION.
+           CONTINUE
+])
+
+AT_CHECK([$COMPILE_ONLY prog.cob], [1], [],
+[prog.cob:8: error: syntax error, unexpected end of file
+])
+
+# fixing the initial setup but now producing a missing newline:
+printf "           CONTINUE." >> prog.cob
+
+AT_CHECK([$COBC -fsyntax-only -Wextra -fixed prog.cob], [0], [],
+[prog.cob:8: warning: line not terminated by a newline [[-Wmissing-newline]]
+])
+AT_CHECK([$COBC -fsyntax-only -Wextra -free prog.cob], [0], [],
+[prog.cob:8: warning: line not terminated by a newline [[-Wmissing-newline]]
+])
+# not yet merged to trunk:
+# should not happen if the data only consists of space characters
+#printf "\n              \t " >> prog.cob
+#
+#AT_CHECK([$COMPILE_ONLY -Wextra prog.cob], [0], [], [])
 AT_CLEANUP
 
 
@@ -3327,7 +3359,7 @@ prog.cob:15: error: significand of 0 must be positive
 prog.cob:15: error: exponent of 0 must be positive
 prog.cob:16: error: invalid floating-point literal: '1.0E00003'
 prog.cob:16: error: exponent has more than 4 digits
-prog.cob:17: error: invalid floating-point literal: '.1234567890123456789012345678901234...'
+prog.cob:17: error: invalid floating-point literal: '.123456789012345678901234567890123 ...'
 prog.cob:17: error: significand has more than 36 digits
 prog.cob:19: error: invalid floating-point literal: '0.0E3'
 prog.cob:19: error: exponent of 0 must be 0
@@ -3348,7 +3380,7 @@ prog2.cob:19: error: significand of 0 must be positive
 prog2.cob:19: error: exponent of 0 must be positive
 prog2.cob:20: error: invalid floating-point literal: '1,0E00003'
 prog2.cob:20: error: exponent has more than 4 digits
-prog2.cob:21: error: invalid floating-point literal: ',1234567890123456789012345678901234...'
+prog2.cob:21: error: invalid floating-point literal: ',123456789012345678901234567890123 ...'
 prog2.cob:21: error: significand has more than 36 digits
 prog2.cob:23: error: invalid floating-point literal: '0,0E3'
 prog2.cob:23: error: exponent of 0 must be 0
@@ -3486,7 +3518,7 @@ AT_CHECK([$COMPILE_ONLY -std=mf prog.cob], [1], [],
 [prog.cob:9: error: invalid B literal: '23'
 prog.cob:9: error: literal contains invalid character '2'
 prog.cob:9: error: literal contains invalid character '3'
-prog.cob:10: error: invalid B literal: '11111111111111111111111111111111111...'
+prog.cob:10: error: invalid B literal: '1111111111111111111111111111111111 ...'
 prog.cob:10: error: literal length 152 exceeds 64 characters
 ])
 
@@ -3516,7 +3548,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE_ONLY prog.cob], [1], [],
-[prog.cob:6: error: invalid BX literal: '0123456789ABCDEF0123456789ABCDEF012...'
+[prog.cob:6: error: invalid BX literal: '0123456789ABCDEF0123456789ABCDEF01 ...'
 prog.cob:6: error: literal length 192 exceeds 64 characters
 ])
 
@@ -3587,7 +3619,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE_ONLY -std=acu prog.cob], [1], [],
-[prog.cob:11: error: invalid B# literal: '11111111111111111111111111111111111...'
+[prog.cob:11: error: invalid B# literal: '1111111111111111111111111111111111 ...'
 prog.cob:11: error: literal length 65 exceeds 64 characters
 prog.cob:12: error: invalid O# literal: '11111111111111111111111'
 prog.cob:12: error: literal length 23 exceeds 22 characters
@@ -3680,7 +3712,7 @@ AT_CHECK([$COMPILE_ONLY -std=acu-strict prog.cob], [0], [], [])
 AT_CHECK([$COMPILE_ONLY prog.cob], [0], [], [])
 
 AT_CHECK([$COMPILE_ONLY -std=mf-strict prog.cob], [1], [],
-[prog.cob:6: error: 'float' is not defined, but is a reserved word in another dialect
+[prog.cob:6: error: syntax error, unexpected Identifier
 prog.cob:8: error: 'double' is not defined, but is a reserved word in another dialect
 ])
 
@@ -3773,13 +3805,13 @@ prog.cob:56: error: HANDLE item not allowed here: 'mydir'
 ])
 
 AT_CHECK([$COMPILE_ONLY -std=rm-strict prog.cob], [1], [],
-[prog.cob:12: error: 'handle' is not defined, but is a reserved word in another dialect
+[prog.cob:12: error: syntax error, unexpected Identifier
 prog.cob:14: error: 'handle' is not defined, but is a reserved word in another dialect
 prog.cob:15: error: syntax error, unexpected Identifier
 prog.cob:17: error: 'handle' is not defined, but is a reserved word in another dialect
-prog.cob:19: error: 'handle' is not defined, but is a reserved word in another dialect
+prog.cob:19: error: syntax error, unexpected Identifier
 prog.cob:20: error: 'handle' is not defined, but is a reserved word in another dialect
-prog.cob:21: error: 'handle' is not defined, but is a reserved word in another dialect
+prog.cob:21: error: syntax error, unexpected Identifier
 prog.cob:15: error: PICTURE clause required for 'unused-thread'
 prog.cob: in paragraph 'MAIN':
 prog.cob:35: error: 'handle IN mywindow' is not defined
@@ -3790,7 +3822,6 @@ prog.cob:39: error: syntax error, unexpected Identifier
 prog.cob:44: error: syntax error, unexpected Identifier, expecting THREAD
 prog.cob:48: error: syntax error, unexpected END-CALL
 prog.cob:51: error: syntax error, unexpected Identifier
-prog.cob:34: error: 'thread' is not defined, but is a reserved word in another dialect
 ])
 
 AT_CLEANUP
@@ -4003,27 +4034,6 @@ prog.cob:23: warning: handling of DISPLAY MESSAGE is unfinished; implementation 
 AT_CLEANUP
 
 
-AT_SETUP([DISPLAY OMITTED])
-AT_KEYWORDS([misc extensions screen])
-
-AT_DATA([prog.cob], [
-       IDENTIFICATION   DIVISION.
-       PROGRAM-ID.      prog.
-       PROCEDURE DIVISION.
-           DISPLAY OMITTED WITH BELL
-           DISPLAY OMITTED LINE 10 COL 15 ERASE EOL
-      *
-           STOP RUN.
-])
-
-AT_CHECK([$COMPILE_ONLY prog.cob], [0], [],
-[prog.cob:5: warning: handling of DISPLAY OMITTED is unfinished; implementation is likely to be changed
-prog.cob:6: warning: handling of DISPLAY OMITTED is unfinished; implementation is likely to be changed
-])
-
-AT_CLEANUP
-
-
 AT_SETUP([CGI: EXTERNAL-FORM])
 AT_KEYWORDS([misc acu extensions accept display])
 
@@ -4186,7 +4196,7 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE_ONLY -std=ibm-strict prog.cob], [1], [],
-[prog.cob:7: error: 'BINARY-LONG' is not defined, but is a reserved word in another dialect
+[prog.cob:7: error: syntax error, unexpected Identifier
 ])
 AT_CHECK([$COMPILE_ONLY -std=ibm-strict -freserved=BINARY-LONG prog.cob], [0], [], [])
 AT_CHECK([$COMPILE_ONLY -std=ibm prog.cob], [0], [], [])
@@ -4874,6 +4884,43 @@ prog.cob:48: error: 'invalid-ptr-7' is not an elementary item
 ])
 AT_CLEANUP
 
+AT_SETUP([STRING with non-DISPLAY])
+AT_KEYWORDS([Initialize])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       DATA  DIVISION.
+       WORKING-STORAGE SECTION.
+       01  I-X        PIC  9(9) COMP-X VALUE 6.
+       01  I-B        PIC  9(9) BINARY VALUE 6.
+       01  I-P        PIC  9(9) COMP-3 VALUE 6.
+       01  I-D        PIC  9(9) VALUE 6.
+       01  I-F        COMP-1 VALUE 6.
+       01  TSTWRK   PIC X(48).
+
+       PROCEDURE DIVISION.
+       MAIN-10.
+           STRING " ID:" I-D 
+               DELIMITED BY SIZE INTO TSTWRK.
+           STRING " IX:" I-X " IB:" I-B 
+                  " ID:" I-D 
+                  " IP:" I-P " IF:" I-F 
+               DELIMITED BY SIZE INTO TSTWRK.
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE -x -std=mf -debug -Wall prog.cob ], [1], [],
+[prog.cob: in paragraph 'MAIN-10':
+prog.cob:19: error: STRING item 'I-X' must be USAGE DISPLAY or NATIONAL
+prog.cob:19: error: STRING item 'I-B' must be USAGE DISPLAY or NATIONAL
+prog.cob:21: error: STRING item 'I-P' must be USAGE DISPLAY or NATIONAL
+prog.cob:21: error: STRING item 'I-F' must be USAGE DISPLAY or NATIONAL
+])
+
+AT_CLEANUP
 
 AT_SETUP([UNSTRING COUNT clause])
 AT_KEYWORDS([misc])
@@ -4975,6 +5022,11 @@ AT_DATA([prog.cob], [
            INSPECT f TALLYING not-a-num FOR ALL 3
                REPLACING FIRST "abcde" BY not-display
            TRANSFORM f FROM 3 TO 2
+           TRANSFORM function udf(f-rec) FROM SPACE TO ZERO
+           TRANSFORM "yada" FROM SPACE TO ZERO
+           INSPECT function trim(f-rec)
+               TALLYING not-display FOR ALL SPACES *> valid with func
+               REPLACING FIRST ZERO BY SPACE       *> not valid
            .
 ])
 
@@ -4990,6 +5042,9 @@ prog.cob:22: error: 'f' is not a field
 prog.cob:22: error: 3 is not an alphanumeric literal
 prog.cob:22: error: 2 is not an alphanumeric literal
 prog.cob:22: error: invalid target for TRANSFORM
+prog.cob:23: error: syntax error, unexpected intrinsic function name, expecting Identifier
+prog.cob:24: error: syntax error, unexpected Literal, expecting Identifier
+prog.cob:25: error: invalid target for REPLACING
 ])
 AT_CLEANUP
 
@@ -5741,9 +5796,9 @@ prog.cob:9: error: '/' operator misplaced
 
 AT_CHECK([$COMPILE_ONLY -std=mf-strict prog.cob], [1], [],
 [prog.cob:6: error: syntax error, unexpected Identifier
-prog.cob:7: error: syntax error, unexpected Identifier
+prog.cob:7: error: 'CONSTANT' is not defined, but is a reserved word in another dialect
 prog.cob:8: error: syntax error, unexpected Identifier
-prog.cob:9: error: syntax error, unexpected Identifier
+prog.cob:9: error: 'CONSTANT' is not defined, but is a reserved word in another dialect
 prog.cob:10: error: syntax error, unexpected Identifier
 ])
 
@@ -6140,8 +6195,6 @@ prog.cob:16: warning: expression '115' LESS THAN '16' is always FALSE [-Wconstan
 prog.cob:17: warning: 'notdefined' is not defined [-Wignored-error]
 prog.cob:20: warning: expression '115' LESS THAN '16' is always FALSE [-Wconstant-numlit-expression]
 prog.cob:24: warning: expression '115' LESS THAN '16' is always FALSE [-Wconstant-numlit-expression]
-prog.cob:25: warning: 'notdefined' is not defined [-Wignored-error]
-prog.cob:21: warning: 'notdefined' is not defined [-Wignored-error]
 ]])
 
 # verify that we do only skip an undefined error when it actually was reported
@@ -6176,23 +6229,16 @@ AT_DATA([prog2.cob], [
 AT_CHECK([$COMPILE_ONLY -fdiagnostics-show-option -Wno-constant-expression prog2.cob], [1], [],
 [[prog2.cob:12: warning: 'notdefined' is not defined [-Wignored-error]
 prog2.cob:17: error: 'notdefined' is not defined
-prog2.cob:21: warning: 'notdefined' is not defined [-Wignored-error]
-prog2.cob:24: error: 'notdefined' is not defined
 ]])
 AT_CHECK([$COMPILE_ONLY -fdiagnostics-show-option -Wno-constant-expression -Wno-ignored-error prog2.cob], [1], [],
 [[prog2.cob:17: error: 'notdefined' is not defined
-prog2.cob:24: error: 'notdefined' is not defined
 ]])
 AT_CHECK([$COMPILE_ONLY -fdiagnostics-show-option -Wno-constant-expression -DSKIP-FIRST-ERROR prog2.cob], [1], [],
 [[prog2.cob:12: warning: 'notdefined' is not defined [-Wignored-error]
-prog2.cob:21: warning: 'notdefined' is not defined [-Wignored-error]
 prog2.cob:24: error: 'notdefined' is not defined
 ]])
 AT_CHECK([$COMPILE_ONLY -fdiagnostics-show-option -Wno-constant-expression -Werror=ignored-error prog2.cob], [1], [],
 [[prog2.cob:12: error: 'notdefined' is not defined [-Werror=ignored-error]
-prog2.cob:17: error: 'notdefined' is not defined
-prog2.cob:21: error: 'notdefined' is not defined [-Werror=ignored-error]
-prog2.cob:24: error: 'notdefined' is not defined
 ]])
 
 AT_CLEANUP
@@ -6590,11 +6636,17 @@ AT_DATA([prog.cob], [
        $SET sourceformat'mis-matched"
 ])
 
+# FIXME: something is broken with the '"#OPTION here,
+#        that should be generated as #OPTION 'mis-matched"
+#        and in a second step not be generated at all
+
 AT_CHECK([$COMPILE_ONLY prog.cob], [1], [],
 [prog.cob:6: error: invalid SOURCEFORMAT directive option 'hi!'
 prog.cob:7: error: invalid SOURCEFORMAT directive option ''
 prog.cob:8: error: syntax error, unexpected Variable, expecting Literal
-prog.cob:8: warning: alphanumeric literal has zero length; a SPACE will be assumed
+prog.cob:8: error: invalid SOURCEFORMAT directive option
+prog.cob:8: error: invalid literal: '"#OPTION mis-matched ...'
+prog.cob:8: error: missing terminating ' character
 prog.cob:8: error: PROGRAM-ID header missing
 prog.cob:8: error: PROCEDURE DIVISION header missing
 prog.cob:8: error: syntax error, unexpected Literal
@@ -7572,11 +7624,30 @@ AT_DATA([prog.cob], [
 ])
 
 AT_CHECK([$COMPILE_ONLY prog.cob], [1], [],
-[prog.cob:5: error: invalid MOVE target: literal ' 1  c d e f g h i j k l m n 0 q. 2 ...'
+[prog.cob:5: error: invalid MOVE target: literal " 1  c d e f g h i j k l m n 0 q. 2 ..."
 ])
-# TODO recheck merge state later:
-#[prog.cob:5: error: invalid MOVE target: " 1  c d e f g h i j k l m n 0 q. 2 ..."
-#])
+
+AT_CLEANUP
+
+
+AT_SETUP([literal missing terminating character])
+AT_KEYWORDS([misc literals terminator])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION   DIVISION.
+       PROGRAM-ID.      tutorial.
+       PROCEDURE DIVISION.
+           DISPLAY ' 1  c d e f g h i j k l m n 0 q.
+      -            ' 2  C D E F G H I J K L M N 0 Q.
+])
+
+# FIXME: we should move this from scanner to pplex to preserve the spaces
+# [prog.cob:5: error: invalid literal: ' 1  c d e f g h i j k l m n 0 q. ...'
+AT_CHECK([$COMPILE_ONLY -w prog.cob], [1], [],
+[prog.cob:5: error: invalid literal: ' 1 c d e f g h i j k l m n 0 q. 2  ...'
+prog.cob:5: error: missing terminating ' character
+prog.cob:5: error: syntax error, unexpected end of file
+])
 
 AT_CLEANUP
 
@@ -7737,6 +7808,55 @@ prog.cob:17: error: syntax error, unexpected ., expecting TIMES
 ]])
 AT_CLEANUP
 
+
+AT_SETUP([PERFORM THRU syntax checks])
+AT_KEYWORDS([misc warning])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       PROCEDURE DIVISION.
+       MAIN SECTION.
+       MAIN-00.
+           PERFORM SUB1
+           PERFORM SUB1 THRU SUB1-EX
+           PERFORM SUB1-00 THRU SUB1-EX
+           PERFORM SUB1 THRU SUB1
+           PERFORM SUB1 THRU SUB2
+           GOBACK.
+       MAIN-EX. EXIT.
+      *
+       SUB1 SECTION.
+       SUB1-00.
+           PERFORM SUB1-01 THRU SUB1-02.
+       SUB1-01.
+           CONTINUE.
+       SUB1-02.
+           CONTINUE.
+       SUB1-EX. EXIT.
+      *
+       SUB2 SECTION.
+       SUB2-00.
+           PERFORM SUB1-02 THRU SUB1-01.
+       SUB2-01.
+           CONTINUE.
+       SUB2-02.
+           CONTINUE.
+       SUB2-EX. EXIT.
+])
+
+AT_CHECK([$COMPILE_ONLY -Wno-suspicious-perform-thru prog.cob], [0], [], [])
+AT_CHECK([$COMPILE_ONLY -Wall -fsection-exit-check prog.cob], [0], [],
+[prog.cob: in section 'SUB2':
+prog.cob: in paragraph 'SUB2-00':
+prog.cob:11: warning: PERFORM ... THROUGH SECTION and -fsection-exit-check are mutually exclusive
+prog.cob:26: warning: SUB1-01 is defined before SUB1-02
+prog.cob:20: note: 'SUB1-02' defined here
+prog.cob:18: note: 'SUB1-01' defined here
+])
+AT_CLEANUP
+
+
 AT_SETUP([OCCURS too many VALUEs])
 AT_KEYWORDS([Initialize])
 
@@ -7801,7 +7921,8 @@ AT_DATA([prog.cob], [
            STOP RUN.
 ])
 
-AT_CHECK([$COMPILE -x -std=mf -debug -Wall prog.cob ], [1], [],
+# FIXME: errors currently only with full compilation
+AT_CHECK([$COMPILE prog.cob], [1], [],
 [prog.cob:15: error: MONTH-IN-YEAR has 2 more values than needed
 prog.cob:26: error: MONTHS has 1 more value than needed
 prog.cob:38: error: FLR has 1 more value than needed
@@ -7809,5 +7930,198 @@ prog.cob:38: error: FLR has 1 more value than needed
 
 AT_CLEANUP
 
+AT_SETUP([Check PIC COMP-X size])
+AT_KEYWORDS([Numeric])
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA  DIVISION.
+       WORKING-STORAGE SECTION.
+       01  TSTN-4   PIC X(4)  COMP-N.
+       01  TSTN-8   PIC X(8)  COMP-N.
+       01  TSTX-4   PIC X(4)  COMP-5.
+       01  TSTX-8   PIC X(8)  COMP-X.
+       01  TSTX-16  PIC X(16) COMP-X.
+       01  TST9-12  PIC 9(12) COMP-X.
+       01  TST9-19  PIC 9(19) COMP-X.
+       01  TST9-20  PIC 9(20) COMP-X.
+       01  TST9-24  PIC 9(24) COMP-X.
+       01  TSTB-34  PIC 9(34).
+
+       PROCEDURE DIVISION.
+           MOVE 4294967295 TO TSTX-4.
+           DISPLAY "TSTX-4 :" TSTX-4 ", Length: " LENGTH OF TSTX-4.
+           MOVE 9223372036854775807 TO TSTX-8.
+           DISPLAY "TSTX-8 :" TSTX-8 ", Length: " LENGTH OF TSTX-8.
+           MOVE 4294967295 TO TSTN-4.
+           DISPLAY "TSTN-4 :" TSTN-4 ", Length: " LENGTH OF TSTN-4.
+           MOVE 9223372036854775807 TO TSTN-8.
+           DISPLAY "TSTN-8 :" TSTN-8 ", Length: " LENGTH OF TSTN-8.
+           MOVE 999999999999        TO TST9-12.
+           DISPLAY "TST9-12:" TST9-12 ", Length: " LENGTH OF TST9-12.
+           MOVE 9223372036854775807 TO TST9-19.
+           DISPLAY "TST9-19:" TST9-19 ", Length: " LENGTH OF TST9-19.
+           MOVE 999999999999999999999999999999999 TO TSTB-34.
+           DISPLAY "TSTB-34:" TSTB-34 ", Length: " LENGTH OF TSTB-34.
+           COMPUTE TSTB-34 = TSTB-34 * 10000000000.
+           DISPLAY "TSTB-34:" TSTB-34 ", Length: " LENGTH OF TSTB-34.
+           STOP RUN.
+])
+
+AT_CHECK([$COMPILE_ONLY prog.cob], [1], [],
+[prog.cob:10: error: 'TSTX-16' COMP-X field cannot be larger than 8 bytes
+prog.cob:13: error: 'TST9-20' COMP-X field cannot be larger than 8 bytes
+prog.cob:14: error: 'TST9-24' COMP-X field cannot be larger than 8 bytes
+])
+
+AT_CLEANUP
+
 
 # TODO: add missing tests for syntax errors in >>IF/ELSE/END
+
+
+AT_SETUP([VALIDATE parsing])
+AT_KEYWORDS([misc 2002 BIT TYPEDEF STRONG VALIDATE-STATUS PRESENT WHEN DESTINATION])
+
+# Note: so far the VALIDATE statement is only partial implemented in the
+#       compiler, but it is planned to completely add it
+# This syntax example also show-cases a bunch of other COBOL 2002 options
+# which would otherwise be not checked elsewhere so far
+
+AT_DATA([prog.cob], [
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. prog.
+       DATA  DIVISION.
+       WORKING-STORAGE SECTION.
+   *> D.22.7.1    Example of validation of USAGE DISPLAY items
+   *>
+   *>*************************************************************
+   *>Description of target record (note: should be possible to define later)
+   *>*************************************************************
+   *>This is set up by the optional DESTINATION clauses defined
+   *>in the input record;
+   *>if a format error is found, a default value is stored instead.
+    01  TARGET-AREA.
+        05  OUT-NAME       PIC X(20).
+        05  OUT-WEEK       PIC 99 COMP   OCCURS 5.
+   *>*************************************************************
+   *>Validated items
+   *>*************************************************************
+    01  INPUT-RECORD.
+   *>PIC 99 checks that IN-TYPE is 2 characters numeric;
+        03  IN-TYPE         PIC 99
+   *>if IN-TYPE fails the PICTURE check, it is assumed to be 1;
+   *>without a DEFAULT clause, the assumed value would here be 0.
+                                DEFAULT 1.
+   *>PRESENT WHEN states the condition for this format to be used.
+        03  IN-REC-FORMAT-1 PRESENT WHEN IN-TYPE = 0 OR 1 OR 2.
+   *>PICTURE A(20) checks for 20 alphabetic (or space) characters.
+            05  IN-NAME       PIC A(20)
+   *>PRESENT WHEN defines when the validation clauses for this data item apply:
+                                 PRESENT WHEN IN-TYPE = 0 OR 1
+   *>CLASS checks each character for a class defined in SPECIAL-NAMES
+   *>or a predefined class
+                                 CLASS IS ALPHABETIC-UPPER 
+   *>DESTINATION moves this item (or spaces if not alpha) to OUT-NAME.
+                                 DESTINATION OUT-NAME.
+   *>PRESENT WHEN checks whether the item is "blank" under this condition
+            05  FILLER REDEFINES IN-NAME  PIC X(20) *> should PIC be optional?
+                                 PRESENT WHEN IN-TYPE = 2
+                                 DESTINATION OUT-NAME.
+                88               VALUE SPACES IS VALID.
+   *>The values of IN-WEEK are checked to be in non-descending order.
+            05  IN-WEEK       PIC 99  OCCURS 5
+                VARYING IN-WEEK-NO FROM 1, IN-NEXT-WEEK-NO FROM 2
+                INVALID WHEN IN-WEEK-NO < 5
+                AND IN-WEEK (IN-WEEK-NO) > IN-WEEK (IN-NEXT-WEEK-NO)
+   *>OUT-WEEK (1) to (5) will hold the values of IN-WEEK (1) to (5),
+   *>or zero for any one that failed the format (PICTURE) test.
+                DESTINATION OUT-WEEK (IN-WEEK-NO).
+   *>The 88-level INVALID entries check for invalid ranges of values.
+               88  VALUES 0, 53 THRU 99 ARE INVALID.
+   *>REDEFINES and another PRESENT WHEN define an alternate format.
+        03  IN-REC-FORMAT-2 REDEFINES IN-REC-FORMAT-1
+                                        PRESENT WHEN IN-TYPE > 2.
+   *>IN-PAY has insertion characters that must be present on input.
+            05  IN-PAY                PIC ZZ,ZZZ.ZZ.
+   *>The 88-level VALID entries check for valid ranges of values;
+   *>the condition-name, if present, may be used in the usual way.
+   *>The following assume that DECIMAL POINT IS COMMA is not specified.
+                 88  IN-PAY-OK  VALUES "10,000.00" THRU "20,000.00" ARE VALID.
+   *>88-level entries may also have a condition attached.
+                 88                    VALUES "20,000.01" THRU "30,000.00" ARE VALID
+                                       WHEN IN-TYPE = 8.
+   *>exceptional cases can be specified using PRESENT WHEN
+            05  IN-CODE                PIC AX(3)9(4) 
+                                       PRESENT WHEN IN-CODE NOT = "UNKNOWN".
+            05  FILLER           PIC X(13).
+   *>
+   *>*************************************************************
+   *> Description of error messages
+   *>*************************************************************
+   *>Error messages or flags are set up or cleared automatically 
+   *>when the VALIDATE statement is executed; the programmer chooses
+   *>where they go and what messages or values they contain;
+   *>they need not be contiguous as they are in this example.
+   01  VALIDATE-MESSAGES.
+       03  PIC X(40)  VALIDATE-STATUS "Unknown Record Type - 1 assumed" 
+                        WHEN ERROR FOR IN-TYPE
+   *> more than one VALIDATE-STATUS clause may be defined in one entry;
+   *> a NO ERROR  phrase produces a message when the item is valid.
+                      VALIDATE-STATUS "Record type Accepted"
+                        WHEN NO ERROR FOR IN-TYPE.
+   *> The VALIDATE-STATUS clause can pinpoint the stage of the failed check.
+       03  PIC X(40)  VALIDATE-STATUS "Name not alphabetic"
+                        WHEN ERROR ON FORMAT FOR IN-NAME
+                      VALIDATE-STATUS "Lower-case not allowed in name"
+                        WHEN ERROR ON CONTENT FOR IN-NAME
+                      VALIDATE-STATUS "Name not allowed in this case"
+                        WHEN ERROR ON RELATION FOR IN-NAME.
+   *> If no message is stored, spaces will be stored in these cases.
+   *> Errors may also be indicated by flags;
+   *> they may also refer to a table of input items.
+       03  W-ERROR-FLAG   PIC 9   COMP  OCCURS 5
+                      VALIDATE-STATUS 1 WHEN ERROR FOR IN-WEEK.
+   *>An EC-VALIDATE (nonfatal) exception is also set if the
+   *>VALIDATE statement detects an invalid condition.
+   
+
+   *> From D.22.7.2    Example of validation of non-display items:
+      01  MIXED-GROUP TYPEDEF STRONG.
+          05  FLD-1             PIC S9(4)  USAGE COMP.
+          05  FLD-2             PIC S9(7)  USAGE PACKED-DECIMAL.
+          05  FLD-3             PIC 1(8)   USAGE BIT ALIGNED.
+          05  PTR-1             USAGE INDEX.
+          05  PTR-2             USAGE OBJECT REFERENCE.
+          05  TXT-1             PIC N(12)  USAGE NATIONAL.
+    01 MY-MIXED-GROUP TYPE MIXED-GROUP.
+   
+   
+   *>
+   *>*************************************************************
+   *>Execution of the VALIDATE statement
+   *>*************************************************************
+    PROCEDURE DIVISION.
+    
+   *>A single VALIDATE statement performs all the actions implied
+   *>in the above data descriptions.
+        VALIDATE INPUT-RECORD
+   *>After this statement has been executed:
+   *>(1) the input record is unchanged;
+   *>(2) input items are moved automatically to the target area;
+   *>(3) error messages are set up wherever specified in the program.
+   *>
+   
+   *> From D.22.7.2    Example of validation of non-display items:
+   *>A declarative section could be used instead of VALIDATE-STATUS clauses
+   *>especially if errors are not expected.
+   *>> TURN EC-VALIDATE CHECKING ON
+        VALIDATE MY-MIXED-GROUP
+        
+     GOBACK.
+])
+
+AT_CHECK([$COMPILE_ONLY -Wno-pending -Wno-unfinished -free prog.cob], [0], [], [])
+
+AT_CLEANUP

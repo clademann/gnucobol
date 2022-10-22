@@ -73,19 +73,19 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(SolutionDir)..\..\libcob;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)-5</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(SolutionDir)..\..\libcob;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)-5</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(SolutionDir)..\..\libcob;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)-5</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(SolutionDir)..\..\libcob;$(IncludePath)</IncludePath>
+    <IncludePath>$(SolutionDir)..;$(SolutionDir)..\..;$(IncludePath)</IncludePath>
     <TargetName>$(ProjectName)-5</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -193,6 +193,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\libcob\exception.def" />
+    <None Include="..\..\libcob\statement.def" />
     <None Include="..\..\libcob\system.def" />
     <None Include="..\..\libcob\ChangeLog" />
   </ItemGroup>
@@ -205,6 +206,7 @@
     <ClInclude Include="..\..\libcob\cobgetopt.h" />
     <ClInclude Include="..\..\libcob\coblocal.h" />
     <ClInclude Include="..\..\libcob\common.h" />
+    <ClInclude Include="..\..\libcob\version.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\version_libcob.rc" />

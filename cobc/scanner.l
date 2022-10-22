@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Edwart Hart,
    Ron Norman
 
@@ -84,6 +84,11 @@ static int yywrap (void) {
 
 #include <ctype.h>
 #include <limits.h>
+
+#include <string.h>
+#ifdef	HAVE_STRINGS_H
+#include <strings.h>
+#endif
 
 #ifdef	HAVE_UNISTD_H
 #include <unistd.h>
@@ -171,7 +176,6 @@ static void	copy_word_in_quotes (char ** const);
 static void	copy_two_words_in_quotes (char ** const, char ** const);
 static void	add_synonym (const int, const int);
 static void	make_synonym (void);
-static void *	copy_literal (cb_tree l);
 
 %}
 
@@ -192,7 +196,7 @@ static void *	copy_literal (cb_tree l);
 	if (cobc_repeat_last_token) {
 		cobc_repeat_last_token = 0;
 		yylval = last_yylval;
-	        return last_token;
+		return last_token;
 	}
 
 	/* We treat integer literals immediately after '.' as labels;
@@ -290,15 +294,29 @@ static void *	copy_literal (cb_tree l);
 	copy_word_in_quotes (&word);
 	remove_reserved_word_now (word);
 	cobc_free (word);
+/* not merged yet
+}
+
+<*>^[ ]?"#REFMOD_ZERO "[0-9]\n {
+	cb_ref_mod_zero_length = (yytext[13] - '0');
+*/
 }
 
 <*>^[ ]?"#ODOSLIDE "[0-1]\n {
 	cb_odoslide = (yytext[10] - '0');
 }
 
-<*>^[ ]?"#ASSIGN".*\n {
-	char	*text = cobc_parse_strdup (yytext);
-	cb_assign_type_default = (enum cb_assign_type)(text[1] - '0');
+<*>^[ ]?"#ASSIGN "[0-9]\n {
+	cb_assign_type_default = (enum cb_assign_type)(yytext[8] - '0');
+/* not merged yet
+<*>^[ ]?"#TURN".*\n {
+	struct cb_turn_list	*l;
+
+	for (l = cb_turn_list; l && l->line != -1; l = l->next);
+	if (l) {
+		l->line = cb_source_line;
+	}
+*/
 }
 
 <*>\n {
@@ -751,9 +769,19 @@ H#[0-9A-Za-z]+ {
 	RETURN_TOK (NOT_INVALID_KEY);
 }
 
-"INVALID"([ ,;\n]+"KEY")?/[ .,;\n] {
+"INVALID"[ ,;\n]+"KEY"/[ .,;\n] {
 	count_lines (yytext);
 	RETURN_TOK (INVALID_KEY);
+}
+
+"INVALID" {
+	if (cobc_in_procedure) {
+		RETURN_TOK (INVALID_KEY);
+	} else {
+		/* note: INVALID is a reserved word in all dialects,
+		         otherwise we'd lookup and return WORD as necessary */
+		RETURN_TOK (INVALID);
+	}
 }
 
 "NO"[ ,;\n]+"DATA"/[ .,;\n] {
@@ -858,8 +886,7 @@ H#[0-9A-Za-z]+ {
 
 "SWITCH"[ ]+([0-9][0-9]?|[A-Z])/[ .,;\n] {
 	/* ACUCOBOL extension: switch-names with space and with letter */
-	char suffix[3] = "";
-	char name[10] = "";
+	char name[10];
 
 	/* FIXME: move the code for filling "name" here and first
 	          check with "lookup_system_name (name) != NULL"
@@ -878,19 +905,8 @@ H#[0-9A-Za-z]+ {
 		}
 	} else {
 		 /* we need to return a single word, reverted later in parser.y */
-		if (yytext[yyleng-2] == ' ' && isdigit((unsigned char)yytext[yyleng-1])) {
-			/* SWITCH 0  to SWITCH 9 */
-			suffix[0] = yytext[yyleng-1];
-		} else if (isdigit((unsigned char)yytext[yyleng-2])) {
-			/* SWITCH 00 to SWITCH 99 */
-			suffix[0] = yytext[yyleng-2];
-			suffix[1] = yytext[yyleng-1];
-		} else {
-			suffix[0] = yytext[yyleng-1];
-		}
-		strncpy(name, yytext, 6);
-		strcat(name, "_");
-		strcat(name, suffix);
+		strcpy (name, yytext);
+		name[6] = '_';
 		yylval = cb_build_reference (name);
 	}
 	RETURN_TOK (WORD);
@@ -977,8 +993,8 @@ H#[0-9A-Za-z]+ {
 
 	/* Direct recursive reference in function */
 	if (current_program->prog_type == COB_MODULE_TYPE_FUNCTION
-		   && !functions_are_all
-		   && !strcasecmp (yytext, current_program->orig_program_id)) {
+	 && !functions_are_all
+	 && !strcasecmp (yytext, current_program->orig_program_id)) {
 		yylval = cb_build_reference (yytext);
 		RETURN_TOK (USER_FUNCTION_NAME);
 	}
@@ -1030,13 +1046,45 @@ H#[0-9A-Za-z]+ {
 			if (p78->chk_const && p78->not_const) {
 				break;
 			}
-			yylval = copy_literal (CB_VALUE (p78->fld_78->values));
-			SET_LOCATION (yylval);
+			x = CB_VALUE (p78->fld_78->values);
+			if (CB_LITERAL_P (x)) {
+				/* duplicate the constant literal
+				   to assign current source location */
+				yylval = cobc_parse_malloc (sizeof (struct cb_literal));
+				memcpy (yylval, x, sizeof (struct cb_literal));
+				SET_LOCATION (yylval);
+			} else {
+				/* Note: we cannot do this for cb_zero and friends,
+				         as those have sepcial meanings and are checked
+						 by tree comparision only */
+				yylval = x;
+			}
 			RETURN_TOK (LITERAL);
 		}
 	}
 
 	yylval = cb_build_reference (yytext);
+	if (cobc_in_data_division) {
+		cb_tree			val;
+		struct cb_reference ref[1];
+		int				xref = cb_listing_xref;
+
+		cb_listing_xref = 0;
+		memcpy ((void*)ref, (void*)yylval, sizeof(ref));
+		val = cb_try_ref (CB_TREE(ref));
+		cb_listing_xref = xref;
+
+		if (val != NULL
+		 && val != cb_error_node
+		 && CB_FIELD_P (val)) {
+			 if (CB_FIELD (val)->flag_is_typedef)
+				RETURN_TOK (TYPEDEF_NAME);
+		}
+		if (cobc_in_usage
+		 && is_default_reserved_word (yytext)) {
+			RETURN_TOK (OTHER_WORD);
+		}
+	}
 
 	/* Special name handling */
 	if (CB_WORD_COUNT (yylval) > 0 && CB_WORD_ITEMS (yylval)) {
@@ -1215,22 +1263,18 @@ H#[0-9A-Za-z]+ {
 static void
 error_literal (const char *type, const char *literal)
 {
-	char		lit_out[39];
-
 	if (!literal_error) {
+		char		lit_out[CB_ERR_LITMAX + 1];
+		/* snip literal for output, if too long or,
+			unlikely error case, has a line break */
+		literal_for_diagnostic (lit_out, literal);
+
 #if 0 /* national literal, check for different truncation and wcslen
 		 or not show it at all */
 		if (strcmp (type, "national") == 0) {
 			cb_error (_("invalid national literal"), lit_out);
 		} else {
 #endif
-			/* snip literal for output, if too long */
-			strncpy (lit_out, literal, 38);
-			if (strlen (literal) > 38) {
-				strcpy (lit_out + 35, "...");
-			} else {
-				lit_out[38] = '\0';
-			}
 			if (strcmp (type, "") == 0) {
 				cb_error (_("invalid literal: '%s'"), lit_out);
 			} else if (strcmp (type, "hex") == 0) {
@@ -1296,6 +1340,16 @@ read_literal (const char mark, const char *type)
 			plex_buff[cb_lit_length] = 0; /* ensure valid C-string for error message */
 			error_literal ("", plex_buff);
 		}
+	}
+	if (c == EOF
+#if EOF != 0
+	 || c == 0 /* fixes unexpected error case */
+#endif
+		) {
+			snprintf (err_msg, COB_MINI_MAX,
+				_("missing terminating %c character"), mark);
+			plex_buff[cb_lit_length] = 0; /* ensure valid C-string for error message */
+			error_literal ("", plex_buff);
 	}
 
 	/* FIXME: Exact behavior should depend on level of support:
@@ -1942,12 +1996,15 @@ scan_floating_numeric (const char *text)
 		  significand_int, significand_dec);
 	if (n == 0) { /* no integer part, copy after decimal-point */
 		significand_int[0] = 0;
-		strncpy (significand_dec, significand_pos + 1, COB_FLOAT_DIGITS_STR_MAX);
+		strcpy (significand_dec, significand_pos + 1);
+#if 0 /* note: we ignore compiler warnings for possible "missing NULL-terminator 
+               here as we know that sscanf handles the correct with */
 		significand_dec[COB_FLOAT_DIGITS_STR_MAX - 1] = 0;
 	} else {
 	/* silencing some warnings */
 		significand_int[COB_FLOAT_DIGITS_STR_MAX - 1] = 0;
 		significand_dec[COB_FLOAT_DIGITS_STR_MAX - 1] = 0;
+#endif
 	}
 
 	/* Validation and exponent handling */
@@ -2066,10 +2123,10 @@ scan_picture (const char *text)
 			*p = 0;
 			break;
 		}
-		*p = (unsigned char)toupper (*p);
+		*p = cb_toupper (*p);
 	}
 
-	yylval = cb_build_picture (text);
+	yylval = CB_TREE (cb_build_picture (text));
 }
 
 static void
@@ -2123,26 +2180,6 @@ cb_add_const_var (const char *name, cb_tree value)
 	} else {
 		top_78_ptr = const_78_ptr;
 	}
-}
-
-
-/* duplicate the given literal to assign a different source location */
-static void *
-copy_literal (cb_tree l)
-{
-	cb_tree x;
-
-	/* LCOV_EXCL_START */
-	if (!CB_LITERAL_P(l)) {
-		cobc_err_msg (_("unexpected tree tag: %d"), (int)CB_TREE_TAG (l));
-		COBC_ABORT ();
-	}
-	/* LCOV_EXCL_STOP */
-
-	x = cobc_parse_malloc (sizeof (struct cb_literal));
-	memcpy (x, l, sizeof (struct cb_literal));
-
-	return x;
 }
 
 static void
@@ -2278,7 +2315,7 @@ copy_word_in_quotes (char ** const word)
 	word_str = strtok (NULL, "\n");
 	word_len = strlen (word_str) - 2;
 	*word = cobc_malloc (word_len + 1);
-	cb_strncpy_upper (*word, word_str + 1, word_len);
+	cb_memcpy_upper (*word, word_str + 1, word_len);
 
 	cobc_free (text);
 }
@@ -2304,12 +2341,12 @@ copy_two_words_in_quotes (char ** const word1, char ** const word2)
 	word1_str = strtok (NULL, " ");
 	word_len = strlen (word1_str) - 2;
 	*word1 = cobc_malloc (word_len + 1);
-	cb_strncpy_upper (*word1, word1_str + 1, word_len);
+	cb_memcpy_upper (*word1, word1_str + 1, word_len);
 
 	word2_str = strtok (NULL, "\n");
 	word_len = strlen (word2_str) - 2;
 	*word2 = cobc_malloc (word_len + 1);
-	cb_strncpy_upper (*word2, word2_str + 1, word_len);
+	cb_memcpy_upper (*word2, word2_str + 1, word_len);
 
 	cobc_free (text);
 }

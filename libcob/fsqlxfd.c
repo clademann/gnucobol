@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2002-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -19,8 +19,6 @@
 */
 
 
-/* Force symbol exports */
-#define	COB_LIB_EXPIMP
 #include "fileio.h"
 
 #if defined(WITH_ODBC) || defined(WITH_OCI) || defined(WITH_DB) || defined(WITH_LMDB)
@@ -112,11 +110,12 @@ db_cmpkey (cob_file *f, unsigned char *keyarea, unsigned char *record, int idx, 
 
 	if (partlen <= 0) {
 		partlen = db_keylen(f, idx);
+		/* LCOV_EXCL_START */
 		if (partlen <= 0) {
 			cob_runtime_error (_("invalid internal call of %s"), "db_cmpkey");
-			cob_runtime_error (_("Please report this!"));
-			cob_stop_run (1);
+			cob_hard_failure_internal ("libcob");
 		}
+		/* LCOV_EXCL_STOP */
 	}
 	if (f->keys[idx].count_components > 0) {
 		totlen = 0;

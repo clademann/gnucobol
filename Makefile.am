@@ -1,7 +1,7 @@
 #
 # Makefile gnucobol
 #
-# Copyright (C) 2003-2012, 2014-2020 Free Software Foundation, Inc.
+# Copyright (C) 2003-2012, 2014-2020, 2022 Free Software Foundation, Inc.
 # Written by Keisuke Nishida, Roger While, Simon Sobisch
 #
 # This file is part of GnuCOBOL.
@@ -39,7 +39,7 @@ dist_noinst_SCRIPTS = autogen.sh po/update_linguas.sh \
 # wrapper for the build environment
 noinst_SCRIPTS = pre-inst-env
 
-EXTRA_DIST = gnucobol.spec DEPENDENCIES HACKING
+EXTRA_DIST = gnucobol.spec DEPENDENCIES DEPENDENCIES.md README.md HACKING
 
 # add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
 include $(top_srcdir)/aminclude_static.am
@@ -48,6 +48,7 @@ clean-local: code-coverage-clean
 dist-clean-local: code-coverage-dist-clean
 
 CODE_COVERAGE_BRANCH_COVERAGE=1
+CODE_COVERAGE_IGNORE_PATTERN="*/cobc/pplex.c" "*/cobc/ppparse.c" "*/cobc/scanner.c" "*/cobc/parser.c"
 
 # files shipped with the package that should be 755'ed:
 FILES_TO_BE_EXECUTABLE = $(dist_noinst_SCRIPTS) \
@@ -57,6 +58,8 @@ FILES_TO_BE_EXECUTABLE = $(dist_noinst_SCRIPTS) \
 	build_aux/missing build_aux/mkinstalldirs build_aux/ylwrap
 
 tarstamps = $(top_distdir)/tarstamp.h tarstamp.h
+
+releasedir = $(abs_builddir)/gnuCobol4${PLATFORM}
 
 # all parts but tarstamp.h should not be necessary...
 dist-hook:
@@ -101,6 +104,69 @@ distmingwdir: all $(top_srcdir)/build_aux/create_mingw_bindist.sh
 distwin:   distwindir
 distmingw: distmingwdir
 
+distbindir = $(distdir)_bin
+distbindir: all distdir
+	$(MAKE) $(AM_MAKEFLAGS) DESTDIR=$(abs_builddir)/$(distbindir) install
+	$(MKDIR_P) "$(distbindir)/${datarootdir}/licenses/$(PACKAGE)"
+	install -p -m644 $(distdir)/COPYING*          "$(distbindir)/${datarootdir}/licenses/$(PACKAGE)"
+	$(MKDIR_P) "$(distbindir)/${datarootdir}/doc/$(PACKAGE)"
+	install -p -m644 $(distdir)/README*           "$(distbindir)/${datarootdir}/doc/$(PACKAGE)"
+	install -p -m644 $(distdir)/NEWS*             "$(distbindir)/${datarootdir}/doc/$(PACKAGE)"
+	install -p -m644 $(distdir)/ChangeLog         "$(distbindir)/${datarootdir}/doc/$(PACKAGE)"
+	install -p -m644 $(distdir)/bin/ChangeLog     "$(distbindir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_bin"
+	install -p -m644 $(distdir)/cobc/ChangeLog    "$(distbindir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_cobc"
+	install -p -m644 $(distdir)/libcob/ChangeLog  "$(distbindir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_libcob"
+	install -p -m644 $(distdir)/doc/gnucobol*.pdf "$(distbindir)/${datarootdir}/doc/$(PACKAGE)"
+
+DISTBIN_TARGETS = distbin-gzip
+gc__remove_bindistdir = rm -rf $(distbindir)
+gc__post_remove_bindistdir = $(gc__remove_bindistdir)
+distbin-gzip: distbindir
+	tardir=$(distbindir) && $(am__tar) | eval GZIP= gzip $(GZIP_ENV) -c >$(distbindir).tar.gz
+	$(gc__post_remove_bindistdir)
+	$(am__post_remove_distdir)
+distbin-bzip2: distbindir
+	tardir=$(distbindir) && $(am__tar) | BZIP2=$${BZIP2--9} bzip2 -c >$(distbindir).tar.bz2
+	$(gc__post_remove_bindistdir)
+	$(am__post_remove_distdir)
+distbin-lzip: distbindir
+	tardir=$(distbindir) && $(am__tar) | lzip -c $${LZIP_OPT--9} >$(distbindir).tar.lz
+	$(gc__post_remove_bindistdir)
+	$(am__post_remove_distdir)
+distbin-xz: distbindir
+	tardir=$(distbindir) && $(am__tar) | XZ_OPT=$${XZ_OPT--e} xz -c >$(distbindir).tar.xz
+	$(gc__post_remove_bindistdir)
+	$(am__post_remove_distdir)
+
+distbin:
+	$(MAKE) $(AM_MAKEFLAGS) $(DISTBIN_TARGETS) gc__post_remove_bindistdir='@:' am__post_remove_distdir='@:'
+	$(gc__post_remove_bindistdir)
+	$(am__post_remove_distdir)
+
+release:
+	rm -rf ${releasedir} gnuCobol4${PLATFORM}.tar.Z $(distbindir)
+	$(MAKE) $(AM_MAKEFLAGS) DESTDIR=$(releasedir) install
+	if test -f /usr/local/bin/vcheck ; then  \
+		cp /usr/local/bin/vcheck ${releasedir}/$(prefix)/bin ; fi
+	if test -f /usr/local/bin/vrecover ; then  \
+		cp /usr/local/bin/vrecover ${releasedir}/$(prefix)/bin ; fi
+	if test -f /usr/local/lib/libvisam.a ; then  \
+		cp /usr/local/lib/libvisam.a ${releasedir}/$(libdir) ; fi
+	$(MKDIR_P) "$(releasedir)/${datarootdir}/licenses/$(PACKAGE)"
+	$(INSTALL_DATA) $(abs_builddir)/COPYING*          "$(releasedir)/${datarootdir}/licenses/$(PACKAGE)"
+	$(MKDIR_P) "$(releasedir)/${datarootdir}/doc/$(PACKAGE)"
+	$(INSTALL_DATA) $(abs_builddir)/README*           "$(releasedir)/${datarootdir}/doc/$(PACKAGE)"
+	$(INSTALL_DATA) $(abs_builddir)/NEWS*             "$(releasedir)/${datarootdir}/doc/$(PACKAGE)"
+	$(INSTALL_DATA) $(abs_builddir)/ChangeLog         "$(releasedir)/${datarootdir}/doc/$(PACKAGE)"
+	$(INSTALL_DATA) $(abs_builddir)/bin/ChangeLog     "$(releasedir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_bin"
+	$(INSTALL_DATA) $(abs_builddir)/cobc/ChangeLog    "$(releasedir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_cobc"
+	$(INSTALL_DATA) $(abs_builddir)/libcob/ChangeLog  "$(releasedir)/${datarootdir}/doc/$(PACKAGE)/ChangeLog_libcob"
+	cd ${abs_builddir}/doc; make gnucobol.pdf
+	$(INSTALL_DATA) $(abs_builddir)/doc/gnucobol*.pdf "$(releasedir)/${datarootdir}/doc/$(PACKAGE)"
+	cd ${releasedir}/$(prefix); tar cf $(abs_builddir)/gnuCobol4${PLATFORM}.tar *; compress $(abs_builddir)/gnuCobol4${PLATFORM}.tar
+	@echo gnuCobol4${PLATFORM}.tar.Z created
+	cd ${abs_builddir}; rm -rf ${releasedir}
+
 $(tarstamps):
 	@echo "Creating $@..."
 	@{								\
@@ -116,7 +182,8 @@ vcs-update:
 
 
 # targets that are only logical targets and should always be executed
-.PHONY: test checkall checkmanual vcs-update distwin distmingw
+.PHONY: test checkall checkmanual vcs-update distwin distmingw \
+	distbin distbin-gzip distbin-bzip2 distbin-lzip distbin-xz
 
 test: all
 	cd tests && $(MAKE) $(AM_MAKEFLAGS) test

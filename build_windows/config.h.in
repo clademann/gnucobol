@@ -1,5 +1,5 @@
 
-/* config.h, tested with x86/x64 VS2008-2019
+/* config.h, tested with x86/x64 VS2008-2022
    and OrangeC 6.0.50 (which ignores the lib comments) */
 
 #define NOISAM       0
@@ -48,6 +48,21 @@
    library for each invocation of libcob, even if not used...
 #define HAVE_GETUSERNAME 1
 */
+
+
+//#define MAKE_DIST 1
+
+#ifndef COB_MAIN_DIR
+ // Use \ to escape things, for example \\ for using in paths
+ // Use \" for paths with spaces
+ #ifdef MAKE_DIST
+  // define MAKE_DIST for defaulting to C:\\GnuCOBOL_Version:
+  #define COB_MAIN_DIR     "C:\\" PACKAGE_NAME "_" PACKAGE_VERSION
+ #else
+  // specify the local path where the gnucobol sources reside in:
+  #define COB_MAIN_DIR     "C:\\GnuCOBOL"
+ #endif
+#endif
 
 /* adjust the following defines to override linker pragmas below */
 /* #undef LIB_MATHLIB */
@@ -125,22 +140,30 @@
 #pragma comment(lib, "libz.dll.a")
 #else
 #pragma comment(lib, "libxml2")
-#pragma comment(lib, "libcharset")
-#pragma comment(lib, "libiconv")
-#ifdef _DEBUG
-#pragma comment(lib, "zlibd")
-#else
-#pragma comment(lib, "zlib")
-#endif
+//#pragma comment(lib, "charset")
+//#pragma comment(lib, "iconv")
+//#ifdef _DEBUG
+//#pragma comment(lib, "zlibd")
+//#else
+//#pragma comment(lib, "zlib")
+//#endif
 #endif
 #endif
 
 #ifdef LIB_JSON
-#pragma comment(lib, LIB_JSON)
+ #pragma comment(lib, LIB_JSON)
 #elif CONFIGURED_JSON == CJSON || CONFIGURED_JSON == CJSON_CJSON
-#pragma comment(lib, "cjson")
+ #pragma comment(lib, "cjson")
 #elif CONFIGURED_JSON == JSON_C
-#pragma comment(lib, "json-c")
+ #pragma comment(lib, "json-c")
+#endif
+
+/* Build ISAM into libcob (only supported for VS builds!) */
+#if CONFIGURED_ISAM == VISAM  \
+ || CONFIGURED_ISAM == VBISAM \
+ || CONFIGURED_ISAM == DISAM  \
+ || CONFIGURED_ISAM == CISAM
+#define WITH_STATIC_ISAM 1
 #endif
 
 #endif /* WITHIN_LIBCOB */
@@ -247,6 +270,9 @@
 
 #endif  /* __ORANGEC__ */
 
+/* informational: build environment --prefix= */
+#define COB_BLD_PREFIX COB_MAIN_DIR
+
 /* compiler used by cobc */
 #if defined(__ORANGEC__)
 #define COB_CC           "occ.exe"
@@ -294,6 +320,9 @@
 
 /* linker flags passed to linker by cobc */
 /* COB_LDFLAGS set above */
+
+/* libcob version */
+#define COB_LIBCOB_VER 5
 
 /* default search path for extra modules */
 #undef COB_LIBRARY_PATH	/* set to define built-in directory */
@@ -462,6 +491,9 @@
 /* #undef HAVE_DISAM_H */
 #endif
 
+/* Has dladdr function */
+/* #undef HAVE_DLADDR */
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 /* #undef HAVE_DLFCN_H */
 
@@ -490,6 +522,9 @@
 #else
 /* #undef HAVE_FLOCKFILE */
 #endif
+
+/* Define to 1 if you have the `fmemopen' function. */
+/* #undef HAVE_FMEMOPEN */
 
 /* Define to 1 if you have the `getexecname' function. */
 #if defined(__ORANGEC__)
@@ -539,12 +574,33 @@
 /* #undef HAVE_ISAM_H */
 #endif
 
+/* Define to 1 if you have the <isconfig.h> header file. */
+#if CONFIGURED_ISAM == DISAM
+#define HAVE_ISCONFIG_H 1
+#else
+/* #undef HAVE_ISCONFIG_H */
+#endif
+
 /* Has isfinite function */
 #if defined(_MSC_VER) && _MSC_VER >= 1800 /* = COB_USE_VC2013_OR_GREATER [which is defined later] */ \
  || defined(__ORANGEC__)
 #define HAVE_ISFINITE 1
 #else
 /* #undef HAVE_ISFINITE */
+#endif
+
+/* Define to 1 if you have the <isintstd.h> header file. */
+#if CONFIGURED_ISAM == DISAM
+#define HAVE_ISINTSTD_H 1
+#else
+/* #undef HAVE_ISINTSTD_H */
+#endif
+
+/* Define to 1 if you have the <iswrap.h> header file. */
+#if CONFIGURED_ISAM == DISAM
+#define HAVE_ISWRAP_H 1
+#else
+/* #undef HAVE_ISWRAP_H */
 #endif
 
 /* Define if you have <langinfo.h> and nl_langinfo(CODESET). */
@@ -581,9 +637,6 @@
 /* Define to 1 if you have the <ltdl.h> header file. */
 /* #undef HAVE_LTDL_H */
 
-/* Define to 1 if you have the <malloc.h> header file. */
-#define HAVE_MALLOC_H 1
-
 /* Define to 1 if you have the `memmove' function. */
 #define HAVE_MEMMOVE 1
 
@@ -619,8 +672,8 @@
 /* Define to 1 if you have the <ncursesw/ncurses.h> header file. */
 /* #undef HAVE_NCURSESW_NCURSES_H */
 
-/* Define to 1 if you have the <ncurses.h> header file. */
-/* #undef HAVE_NCURSES_H */
+/* Define to 1 if you have the <ncurses/curses.h> header file. */
+/* #undef HAVE_NCURSES_CURSES_H */
 
 /* Define to 1 if you have the <ncurses/ncurses.h> header file. */
 /* #undef HAVE_NCURSES_NCURSES_H */
@@ -790,8 +843,14 @@
 /* Define to 1 if you have the `vprintf' function. */
 #define HAVE_VPRINTF 1
 
-/* Define to 1 if you have the <wchar.h> header file. */
-#define HAVE_WCHAR_H 1
+/* Define to 1 if you have the <xcurses/curses.h> header file. */
+/* #undef HAVE_XCURSES_CURSES_H */
+
+/* Define to 1 if you have the <xcurses.h> header file. */
+/* #undef HAVE_XCURSES_H */
+
+/* path for locale-dependent data */
+#undef LOCALEDIR
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 /* #undef LT_OBJDIR */
@@ -824,17 +883,8 @@
 #define PATCH_LEVEL COB_NUM_TAR_DATE
 
 
-// Use \ to escape things, for example \\ for using in paths
-// Use \" for paths with spaces
-
-// define MAKE_DIST for using C:\\GnuCOBOL_Version:
-//#define MAKE_DIST 1
-
 #ifdef MAKE_DIST
-#ifndef COB_MAIN_DIR
-#define COB_MAIN_DIR     "C:\\" PACKAGE_NAME "_" PACKAGE_VERSION
-#endif
-#define COB_CFLAGS       "-I \"" COB_MAIN_DIR "\\include\""
+#define COB_CFLAGS       "/I\"" COB_MAIN_DIR "\\include\""
 
 #if defined(__ORANGEC__)
 #ifdef _WIN64 /*note: currently no x64 with OrangeC */
@@ -851,13 +901,7 @@
 #endif
 
 #else  // no MAKE_DIST
-
-// specify the local path where the gnucobol sources reside in:
-
-#ifndef COB_MAIN_DIR
-#define COB_MAIN_DIR     "C:\\GnuCOBOL"
-#endif
-#define COB_CFLAGS       "-I \"" COB_MAIN_DIR "\" -I \"" COB_MAIN_DIR "\\build_windows\""
+#define COB_CFLAGS       "/I\"" COB_MAIN_DIR "\" /I\"" COB_MAIN_DIR "\\build_windows\""
 
 #ifdef _WIN64
 #define TARGET_PLATFORM "x64"
@@ -940,7 +984,7 @@
 /* #undef WITH_DB */
 #endif
 
-/* Use D-ISAM as INDEXED handler */
+/* Use DISAM as INDEXED handler */
 #if CONFIGURED_ISAM == DISAM
 #define WITH_DISAM 1
 #else
@@ -958,7 +1002,7 @@
 #define WITH_IXDFLT  "VBISAM"
 #define WITH_INDEXED COB_IO_VBISAM
 #elif CONFIGURED_ISAM == DISAM
-#define WITH_IXDFLT  "D-ISAM"
+#define WITH_IXDFLT  "DISAM"
 #define WITH_INDEXED COB_IO_DISAM
 #elif CONFIGURED_ISAM == BDB
 #define WITH_IXDFLT  "BDB"
@@ -1025,9 +1069,6 @@
 
 /* Compile with obsolete external SEQ/RAN handler */
 /* #undef WITH_SEQRA_EXTFH */
-
-/* Build ISAM into libcob */
-/* #undef WITH_STATIC_ISAM */
 
 /* Define variable sequential file format */
 #define WITH_VARSEQ 0

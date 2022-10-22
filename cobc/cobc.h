@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch,
    Edward Hart, Ron Norman, Dave Pitts
 
@@ -23,18 +23,20 @@
 #ifndef CB_COBC_H
 #define CB_COBC_H
 
-#include <stdio.h>
+/* inclusion of common.h to get type definitions and some macros
+   TODO: move those out of common.h to a second installed header
+         and include that here */
 #ifdef	HAVE_UNISTD_H
 #include <unistd.h>
+#else
+#include <stdio.h>
 #endif
-#ifdef	HAVE_STRINGS_H
-#include <strings.h>
-#endif
+#include <stdio.h>	/* for FILE* */
 
-#include "libcob.h"
+#include "../libcob/common.h"
 
 #ifdef	ENABLE_NLS
-#include "gettext.h"	/* from lib/ */
+#include "../lib/gettext.h"
 #define _(s)		gettext(s)
 #define N_(s)		gettext_noop(s)
 #else
@@ -137,6 +139,8 @@ enum cb_current_date {
 #define	CB_CS_INSPECT			CB_CS_DAY
 #define	CB_CS_CONVERT			CB_CS_DAY
 #define	CB_CS_MODULE_NAME		CB_CS_DAY
+#define	CB_CS_DEFAULT			CB_CS_DAY
+#define	CB_CS_VALIDATE_STATUS	CB_CS_DAY
 
 /* Support for cobc from stdin */
 #define COB_DASH			"-"
@@ -288,15 +292,6 @@ struct cb_exception {
 	int		enable;			/* If turned on */
 };
 
-/* Basic memory structure */
-struct cobc_mem_struct {
-	struct	cobc_mem_struct	*next;			/* next pointer */
-	void			*memptr;
-	size_t			memlen;
-};
-#define COBC_MEM_SIZE ((sizeof(struct cobc_mem_struct) + sizeof(long long) - 1) \
-						/ sizeof(long long)) * sizeof(long long)  
-
 /* Type of name to check in cobc_check_valid_name */
 enum cobc_name_type {
 	FILE_BASE_NAME = 0,
@@ -430,7 +425,7 @@ enum cb_warn_val {
 	COBC_WARN_AS_ERROR = 4
 };
 
-extern int cb_warn_opt_val[COB_WARNOPT_MAX];
+extern int cb_warn_opt_val[COB_WARNOPT_MAX];	/* note: int as we feed that to getopt */
 
 
 #define	CB_OPTIM_DEF(x)			x,
@@ -534,9 +529,11 @@ extern void			*cobc_plex_strdup (const char *);
 extern void			*cobc_check_string (const char *);
 extern void			cobc_err_msg (const char *, ...) COB_A_FORMAT12;
 
+extern char			*cobc_elided_strcpy (char *, const char *, const size_t, const int);
+
 DECLNORET extern void		cobc_abort (const char *,
 					    const int) COB_A_NORETURN;
-DECLNORET extern void		cobc_abort_terminate (int) COB_A_NORETURN;
+DECLNORET extern void		cobc_abort_terminate (const int) COB_A_NORETURN;
 
 
 extern size_t			cobc_check_valid_name (const char *,
@@ -556,6 +553,8 @@ extern void		cobc_print_usage_flags (void);
 extern type			var;
 #define	CB_CONFIG_INT(var,name,min,max,odoc,doc)	\
 extern unsigned int		var;
+#define	CB_CONFIG_SINT(var,name,min,max,odoc,doc)	\
+extern int		var;
 #define	CB_CONFIG_SIZE(var,name,min,max,odoc,doc)	\
 extern unsigned long	var;
 #define	CB_CONFIG_STRING(var,name,doc)	\
@@ -569,6 +568,7 @@ extern enum				cb_support var;
 
 #undef	CB_CONFIG_ANY
 #undef	CB_CONFIG_INT
+#undef	CB_CONFIG_SINT
 #undef	CB_CONFIG_SIZE
 #undef	CB_CONFIG_STRING
 #undef	CB_CONFIG_BOOLEAN
@@ -580,9 +580,11 @@ extern int		cb_load_conf (const char *, const int);
 extern int		cb_load_words (void);
 
 #ifndef	HAVE_DESIGNATED_INITS
-/* Initialization routines in typeck.c and reserved.c */
+/* "static" initialization routines in several files */
 extern void		cobc_init_typeck (void);
 extern void		cobc_init_reserved (void);
+extern void		cobc_init_tree (void);
+extern void		cobc_init_codegen (void);
 #endif
 
 /* preprocessor (in pplex.l, ppparse.y) */
@@ -639,23 +641,24 @@ extern void		cb_init_codegen (void);
 #define CB_MSG_STYLE_GCC	0
 #define CB_MSG_STYLE_MSC	1U
 
-#define CB_PENDING(x) \
-	do { cb_warning (cb_warn_pending, _("%s is not implemented"), x); } ONCE_COB
-#define CB_PENDING_X(x,y) \
-	do { cb_warning_x (cb_warn_pending, x, _("%s is not implemented"), y); } ONCE_COB
-#define CB_UNFINISHED(x) \
-	do { cb_warning (cb_warn_unfinished, \
-		_("handling of %s is unfinished; implementation is likely to be changed"), x); \
-	} ONCE_COB
-#define CB_UNFINISHED_X(x,y) \
+#define CB_PENDING_X(x,s) \
+	do { cb_warning_x (cb_warn_pending, x, _("%s is not implemented"), s); } ONCE_COB
+
+#define CB_UNFINISHED_X(x,s) \
 	do { cb_warning_x (cb_warn_unfinished, x, \
-		_("handling of %s is unfinished; implementation is likely to be changed"), y); \
+		_("handling of %s is unfinished; implementation is likely to be changed"), s); \
 	} ONCE_COB
+#define CB_PENDING(s)		CB_PENDING_X	(cb_error_node, s)
+#define CB_UNFINISHED(s)	CB_UNFINISHED_X	(cb_error_node, s)
+#define CB_UNSUPPORTED(x) \
+	do { cb_error (_("%s is not supported"), x); } ONCE_COB
+#define CB_UNSUPPORTED_X(x,y) \
+	do { cb_error_x (x, _("%s is not supported"), y); } ONCE_COB
 
 extern size_t		cb_msg_style;
 
-extern void		cb_warning (const enum cb_warn_opt, const char *, ...) COB_A_FORMAT23;
-extern void		cb_error (const char *, ...) COB_A_FORMAT12;
+extern enum cb_warn_val		cb_warning (const enum cb_warn_opt, const char *, ...) COB_A_FORMAT23;
+extern enum cb_warn_val		cb_error (const char *, ...) COB_A_FORMAT12;
 extern void		cb_error_always (const char *, ...) COB_A_FORMAT12;
 extern void		cb_perror (const int, const char *, ...) COB_A_FORMAT23;
 extern void		cb_plex_warning (const enum cb_warn_opt, const size_t,
@@ -689,5 +692,9 @@ extern void		activate_intrinsic (const char *, const char *, const int);
 
 extern void		deactivate_system_name (const char *, const char *, const int);
 extern void		activate_system_name (const char *, const char *, const int);
+
+extern int		cb_strcasecmp (const void *, const void *);
+extern unsigned char	cb_toupper (const unsigned char);
+extern unsigned char	cb_tolower (const unsigned char);
 
 #endif /* CB_COBC_H */

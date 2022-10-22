@@ -1,12 +1,421 @@
 
+2022-10-19  Simon Sobisch <simonsobisch@gnu.org>
+
+	* statement.def: added STMT_PRESENT_WHEN
+
+2022-10-18  Simon Sobisch <simonsobisch@gnu.org>
+
+	* Makefile.am: moved header files that are not installed from EXTRA_DIST
+	  to _SOURCES (per automake manual)
+	* fileio.c (sequential_read): andle variable-sized record-sequential
+	  files when the size was read, but no data found for that afterwards
+	* mlio.c (xml_parse): fix bad assignment leading to compiler warnings
+	* common.c (cob_check_beyond_exit), common.h: new function for implicit
+	  exit/goback checks
+
+2022-10-17  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_debug_open, cob_trace_print), intrinsic.c
+	 (cob_intr_hex_to_char): prefer extending switch over use of topupper
+	* call.c, common.c, intrinisic.c, screenio.c: directly call toupper/tolower
+	  without previous check of islower/isupper
+	* system.def, common.c (cob_sys_runtime_error_proc):
+	  implement CBL_RUNTIME_ERROR
+
+2022-10-15  Simon Sobisch <simonsobisch@gnu.org>
+
+	* version.h, Makefile.am: new file, moving out version
+	  definitions from common.h
+	* common.h: drop COB_WITHOUT_EXCEPTIONS, which was added only for
+	  resource compilers, which should now include libversion.h
+	* common.c (cob_runtime_warning_external, cob_runtime_warning):
+	  fix mixing of stdio/direct writes without flush
+
+2022-10-14  Simon Sobisch <simonsobisch@gnu.org>
+
+	* statement.def, Makefile.am: new file containing definitions of
+	  internally used statements and their string representation
+	* common.h (enum cob_statement): use new definitions to create enum
+	* coblocal.h (cob_statement_name), common.c: pre-initialized table
+	  to translate enum cob_statement to text
+	* common.c, common.h, intrinsic.c: adjusted to store the enum value
+	  instead of the string and translate only on necessary output
+
+2022-10-12  Simon Sobisch <simonsobisch@gnu.org>
+
+	* intrinsic.c (cob_decimal_set): removed (integrated where used)
+	* numeric.c, common.h: renamed cob_decimal_copy to cob_decimal_set
+	  and marked it for removal
+
+2022-10-11  Simon Sobisch <simonsobisch@gnu.org>
+
+	* intrinsic.c (cob_log_ten): new static field to speedup cob_intr_log10
+	* intrinsic.c: only setup cob_sqrt_two, cob_pi, cob_log_half, cob_log_ten
+	  on first use, to speedup init/teardown when not used
+	* intrinsic.c, common.c: some more use of COB_D2I
+
+2022-10-11  Ron Norman <rjn@inglenet.com>
+
+	* fextfh.c: Return the process id that is blocking a 
+	  record/file lock in FCD3 field FCD-SESSION-ID.
+	* fextfh.c: Was reallocing the key field for RELATIVE files
+	  The code that doing now only executes if there was no
+	  RELATIVE KEY defined at all
+
+2022-10-10  Simon Sobisch <simonsobisch@gnu.org>
+
+	* intrinsic.c (cob_intr_bit_of, cob_intr_bit_to_char,cob_intr_hex_of
+	  cob_intr_hex_to_char): fixed invalid attribute of return field
+	* common.c, common.h, coblocal.h, fileio.c, numeric.c: changed
+	* common.c (cob_hard_failure_internal), common.h, coblocal.h, fileio.c,
+	  numeric.c: changed to take an optional prefix and be exported to be
+	  used in cobc
+	* common.c: change COB_CORE_ON_ERROR=3 to not manually generate a corefile
+	  when called from a signal handler as this isn't signal safe
+	* common.c, coblocal.h: add COB_CORE_FILENAME to allow specifying a
+	  path, changed default to "core.libcob"
+	* common.c: defined macros for use of write to simplify code and to
+	  stop output by returning the function in case of errors fixing
+	   -Wunused-result compiler warnings
+
+2022-10-09  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c, coblocal.h: addition of COB_CORE_ON_ERROR to enable
+	  auto-creation of coredumps on error, sending SIGABRT on error
+	  and the option to let the OS handle signals
+	* common.c (create_dumpfile): implemented COB_CORE_ON_ERROR=3
+	* common.c (output_procedure_stack_entry, cob_stack_trace_internal):
+	  replaced use of stdio functions by signal-safe write + memcpy
+
+
+2022-10-05  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (check_current_date): improved validation
+	* common.c, intrinsic.c: favor strcpy, snprintf over strncpy
+
+2022-10-04  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_stack_trace_internal, output_procedure_stack_entry):
+	  use cob_frame_ext information when available to output PERFORM stack
+	* common.c (cob_set_exception): store strings in a local copy
+	  preventing SIGSEGV after CANCEL
+	* common.c (cob_trace_section): if line is not specified (done for
+	  "exit module" tracing), resolve that from current line, if known
+	  (to provide same output as the version that this was used with)
+	* intrinsic.c: extend internal docs
+	* fileio.c: add some guards against bad function calls
+
+2022-09-30  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.h (cob_frame_ext): new variant of cob_frame storing the
+	  section/paragraph + location to return to; allowing a full textual
+	  PERFORM stack and used for restoring those on return
+	* common.h (cob_module): fields for current frame_ptr
+
+2022-09-08  Simon Sobisch <simonsobisch@gnu.org>
+
+	* fbdb.c: manual merge of fileio.c from 2019-08-25 and 2021-01-08
+	  including clean-up and bugfix of that
+	* fbdb.c: for retry lock: only set loc object dbt once,
+	  not in each iteration
+
+2022-07-25  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.h (cob_file_routines, cob_file_operation): moved defines to enum
+	* common.h (cob_file), fileio.c: adjusted to use new enums
+	* fileio (not_available_funcs): new io function set, returning status 91
+	* fileio (get_io_ptr): if function is not available change io functions
+	  to COB_IO_NOT_AVAIL to prevent follow-up SIGSEGVs and provide reasonable
+	  return value to the program
+	* common.c (cob_add_exception), coblocal.h: new function to activate more
+	  than one exception at the same time
+	* common.c (cob_get_last_exception_name): adjusted to care for
+	  cob_add_exception
+	* screenio.c (handle_status): pass type of statement to raise
+	  either COB_EC_IMP_ACCEPT or COB_EC_IMP_DISPLAY
+	* screenio.c (handle_status, cob_set_crt3_status) [!COB_GEN_SCREENIO]:
+	  unconditionally defined those functions and finally return error
+	  status and nonfatal exception along with a warning on accept if the
+	  runtime is not configured for extended screenio
+	* mlio.c (set_xml_exception, set_xml_code, set_json_exception,
+	  set_json_code): unconditionally defined those functions and return
+	  error status and fatal exception (no runtime exit) along with a
+	  warning if the runtime is not configured for XML / JSON
+
+2022-07-10  Simon Sobisch <simonsobisch@gnu.org>
+
+	* screenio.c [__PDCURSES__] (cob_exit_screen): execute
+	  PDC_free_memory_allocations if available
+	* screenio (cob_exit_screen): fixed order of endwin and delwin,
+	  preventing memory leaks on exit of extended screenio
+	* common.c, coblocal.h, screenio.c (cob_exit_screen_from_signal):
+	  only minimal screenio exit from signal handler
+
+2022-07-04  Ron Norman <rjn@inglenet.com>
+
+	* Updated Copyright date to include 2022
+	* Reverted back to using D-ISAM and V-ISAM names
+
+2022-06-21  Simon Sobisch <simonsobisch@gnu.org>
+
+	* Makefile.am: always build INDEXED handlers as separate libraries
+	* libcobvc.c, libcobvb.c, libcobci.c, libcobdi.c, fileio.h: simplified
+	* fisam.c: spelling correction for D-ISAM and VBISAM
+	* fileio.c (cob_io_version), common.c: add "quiet" version
+	  to output only name
+	* fileio.c (cob_load_module): try to resolve entrypoint in libcob
+	  if loading in external file did not work
+	* fisam.c: re-arranged defines and checks
+
+2022-06-12  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_init_sig_descriptions): new function with code
+	  previously found cob_get_sig_description and cob_set_sig_description
+	  to pre-set signal description table on initialization,
+	  allowing to access it signal-safe in the signal-handler
+	* common.c (get_signal_entry) extracted from cob_get_sig_name,
+	  cob_get_sig_description
+	* common.c: rename signal_value back to sig (as standard name for
+	  signal handler related functions)
+	* common.c (ss_itoa_u10): new signal-safe function to build string
+	  from integer (base 10), based on implementation by "Shaoquan"
+	* common.c: replaced stdio in functions called by cob_sig_handler
+	  by signal-safe functions; exceptions: dump-routines
+	* fileio.c (cob_get_filename_print): replaced use of stdio functions
+	  by signal-safe functions as we may be called from there
+
+2022-05-30  Simon Sobisch <simonsobisch@gnu.org>
+
+	* numeric.c (num_byte_memcpy): removed, callers adjusted to
+	  use memcpy instead
+
+2022-05-24  Simon Sobisch <simonsobisch@gnu.org>
+
+	* strings.c (cob_inspect_converting): fix possible stackoverflow
+	* call.c (cob_resolve_internal): fix possible stack-use-after-scope,
+	  happening if name conversion is active, introduced on 2020-11-29
+	  and distributed with 3.1.2
+
+2022-05-23  Simon Sobisch <simonsobisch@gnu.org>
+
+	* strings.c (inspect_common_no_replace, inspect_common_replacing):
+	  split from inspect_common to enable further optimization for
+	  non replacing variant
+	* strings.c (inspect_common_no_replace): for LEADING and TRAILING - do
+	  not mark each occurrence, instead gather range, then set the marker
+	  afterwards to reduce the number of expensive small memsets
+	  (TALLYING for 20000 TRAILING spaces -> 1 memset instead of 20000)
+
+2022-05-21  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_sig_handler): integrated (cob_sig_handler_ex) and fix
+	  re-execution of signal handler to raise, effectively reverting most
+	  of the changes from 2014-03-03
+
+2022-05-17  Ron Norman <rjn@inglenet.com>
+
+	* common.h: add 'roffset' to cob_symbol to hold original offset of field
+	* common.c: fix issue with a dump incorrectly reporting 'CODEGEN ERROR'
+
+2022-05-11  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_get_sign_ascii, cob_put_sign_ascii, cob_put_sign_ebcdic):
+	  skip sign-adjustment if data is already without/with sign
+	* common.c (cob_put_sign_ebcdic): invalid data for negative sign is now
+	  converted to -0 instead of +0
+	* strings.c (cob_inspect_init_common): extracted from cob_inspect_init
+	* strings.c (cob_inspect_converting): reordered code, so inspect_mark
+	  is no longer needed
+	* strings.c (cob_inspect_init_common): extracted from cob_inspect_init
+	* strings.c (cob_inspect_init_converting), common.h: new stripped down
+	  variant of cob_inspect_init
+	* strings.c (cob_inspect_converting): changed conversion to be based
+	  on pre-computed conversion tables, improving performance a lot
+
+2022-04-12  Ron Norman <rjn@inglenet.com>
+
+	* Makefile.am : add LIBCOB_VER for --version-info instead of hard coded
+	* common.c: removed checks for running in development mode for relocation
+
+2022-04-11  Simon Sobisch <simonsobisch@gnu.org>
+
+	* strings.c (inspect_find_data): extracted from cob_inspect_before /
+	  cob_inspect_after
+	* strings.c (cob_inspect_characters): use (is_marked) to count/replace
+	  all characters at once when possible
+	* strings.c (inspect_common, cob_inspect_characters,
+	  cob_inspect_converting): early exit if nothing to inspect
+	* strings.c (cob_init_strings, cob_inspect_init, cob_unstring_init):
+	  don't pre-allocate inspect_mark, inspect_repdata, dlm_list but
+	  allocate with minimal default size on first use
+
+2022-04-08  Simon Sobisch <simonsobisch@gnu.org>
+
+	* strings.c (do_mark, is_marked): extracted from inspect_common
+	* strings.c (set_inspect_mark): new function to remember actual min/ma
+	  positions of the marker bytes to remove the need to initialize huge
+	  areas when we commonly have set only markers in the first n bytes
+	  (or nothing), especially for INSPECT LEADING/TRAILING
+	* strings.c (cob_inspect_init, cob_inspect_characters, is_marked): use of
+	  the now definitive check "did we mark anything" instead of checking all
+	  marker bytes by testing for "inspect_mark[inspect_mark_min] != 0"
+	* strings.c (is_marked): check for possible/definitel overlap of
+	  check and marker range before checking all marker bytes in range
+	* strings.c: increase use of direct pointer comparisons instead of
+	  accessing char arrays or its positions for INSPECT
+
+2022-04-04  Simon Sobisch <simonsobisch@gnu.org>
+
+	* Makefile.am (AM_CPPFLAGS): removed LOCALEDIR, now back in config.h
+	* common.c: [_WIN32]: necessary inclusion + define for relocation code
+	* common.c (cob_relocate_string, cob_find_path, cob_setup_env): handle
+	  different compilers, win32 paths and binaries
+	* common.c: handle memory issues with long paths
+
+2022-04-01  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.h -> sysdefines.h [__DJGPP__]: use DOS path specs
+
+2022-03-29  Ron Norman <rjn@inglenet.com>
+
+	* common.c (cob_find_path) : If unistd.h not present or on Windows
+					The code to check group permissions is not used
+					Check for alternate shared library suffixes
+
+2022-03-28  Ron Norman <rjn@inglenet.com>
+
+	* common.c,common.h : Add routines cob_setup_env, cob_getenv_value,
+						cob_relocate_string. All used for installing
+						compiler into directory different that declared
+						when compiler was built
+
+2022-02-21  Ron Norman <rjn@inglenet.com>
+
+	* move.c (cob_move_display_to_packed): If P used in PIC adjust data move
+	* termio.c (pretty_display): Check for use of P in PIC and adjust
+
+2022-02-16  Ron Norman <rjn@inglenet.com>
+
+	* screenio.c (cob_field_display): If no field, use empty field as default
+					This is to handle DISPLAY OMITTED
+
+2022-01-30  Simon Sobisch <simonsobisch@gnu.org>
+
+	* call.c (set_resolve_error): distinguish between exceptions
+	  COB_EC_PROGRAM_NOT_FOUND and COB_EC_FUNCTION_NOT_FOUND
+	* fileio.c (indexed_open, join_environment) [WITH_DB]: return
+	  file sharing error if BDB environment cannot be joined
+	* fileio.c (cob_sys_check_file_exist, cob_get_sort_tempfile): return
+	  appropriate error code on errors instead of runtime exit
+	* screenio.c: preparations to later raise exceptions in error cases
+	* common.c (cob_sys_exit_proc): fixes to set / query priority and
+	  return code in case of errors as "per documentation"
+	* common.c, coblocal.h: added cob_hard_failure + cob_hard_failure_internal
+	* call.c, numeric.c, fileio.c, screenio.c: use of cob_hard_failure and
+	  cob_hard_failure_internal instead of internal STOP RUN
+	* common.c: changed runtime error buffer to be static and set
+	  first via new internal function cob_setup_runtime_error_str
+	  when runtime errors occur
+	* common.c (cob_call_with_exception_check, cob_last_exit_code,
+	  cob_last_runtime_error), common.h: added new C API functions that uses
+	  setjmp/longjmp to allow COBOL calls without possible process interruption
+
+2022-01-28  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_check_trace_file), coblocal.h: externalize function
+	* fileio.c (cob_file_save_status): make io tracing independent
+	  of execution tracing
+	* fileio.c (cob_file_save_status): instead of only partial open logic for
+	  the trace file, use full implementation of cob_check_trace_file;
+	  moved some code to inline functions
+	* common.h, coblocal.h: hide cob_file_fcd_sync, cob_fcd_file_sync
+	* fextfh.c (update_file_to_fcd, copy_file_to_fcd): moved some settings in
+	  fcd, amongst others preserving io trace and io stat flags
+	* fileio.c, fextfh.c (update_file_to_fcd, copy_fcd_to_file), fileio.c:
+	  handle ls_instab attribute
+	* common.h (cob_file), fileio.c: define and handle organization and access_mode
+	  as enums
+
+2022-01-25  Ron Norman <rjn@inglenet.com>
+
+	* common.h: Add define  COB_MAX_COMPX
+
+2022-01-24  Ron Norman <rjn@inglenet.com>
+
+	* common.c: report if no runtime.cfg was used
+
+2022-01-19  Ron Norman <rjn@inglenet.com>
+
+	* reportio.c: Use cob_move to copy 'literal' into report field
+
+2022-01-17  Simon Sobisch <simonsobisch@gnu.org>
+
+	* numeric.c (cob_decimal_adjust): rewrite code for trailing zero removing,
+	  heavily improving ccomputation and comparison of FLOAT-DECIMAL
+	* numeric.c: actually handle up to COB_MAX_BINARY, not one less
+
+2022-01-17  Ron Norman <rjn@inglenet.com>
+
+	* cobcapi.h, cobcapi.c: add cob_get_field_right & cob_get_param_right
+
+2022-01-13  Ron Norman <rjn@inglenet.com>
+
+	* common.h: REPORT struct changes
+	* fileio.c: changes to get CR LF usage to match Microfocus
+	* reportio.c: Updates for SUM expression-list
+			Multiple fields become and expression
+			To compute the expression values a call back is done
+
+2022-01-04  Ron Norman <rjn@inglenet.com>
+
+	* fisam.c: Handle primary key with DUPLICATES
+
+2022-01-03  Simon Sobisch <simonsobisch@gnu.org>
+
+	* coblocal.h, common.h: moved some internal limits to coblocal.h
+	* fileio.c, common.h: moved COB_CHAR_xxx to fileio.c
+
+2022-01-01  Ron Norman <rjn@inglenet.com>
+
+	* numeric.c: Speed up cob_decimal_adjust routine
+
+2021-12-31  Ron Norman <rjn@inglenet.com>
+
+	* numeric.c: speed up cob_decimal_add, cob_decimal_sub, cob_decimal_cmp
+	  use the powers of 10 table instead of recomputing;
+	  add cob_decimal_copy for use by emitted code
+
+2021-12-30  Ron Norman <rjn@inglenet.com>
+
+	* reportio.c: Move data fields before invoking DECLARATIVES code
+
+2021-12-29  Ron Norman <rjn@inglenet.com>
+
+	* reportio.c: Process CONTROL Headings in opposite order to Footings
+
+2021-12-27  Ron Norman <rjn@inglenet.com>
+
+	* reportio.c: Fixed spacing and test cases to match Microfocus
+
+2021-12-12  Ron Norman <rjn@inglenet.com>
+
+	* common.h: Added flag_do_rollback
+	* fileio.c: If flag_do_rollback is set then all WRITE/DELETE/REWRITE
+	  to be done regardless of file open mode
+
 2021-12-08  Ron Norman <rjn@inglenet.com>
 
-	* move.c.c,common.h: Added cob_set_compx for saving values into
+	* move.c,common.h: Added cob_set_compx for saving values into
 				COMP-X field
 
 2021-12-05  Ron Norman <rjn@inglenet.com>
 
-	* fileio.c,coblocal.h: Removed unused/unsettable variable cob_ls_uses_cr
+	* fileio.c, coblocal.h: Removed unused/unsettable variable cob_ls_uses_cr
+
+2021-12-03  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (print_version_summary) [__PDCURSES__]: show version
+	  info for old versions of PDCurses, too
 
 2021-11-28  Ron Norman <rjn@inglenet.com>
 
@@ -30,6 +439,18 @@
 2021-11-10  Ron Norman <rjn@inglenet.com>
 
 	* fileio.c: Test code for bug #604 but not sure if it should be
+
+2020-11-09  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_terminate_routines): fixed typo in dump skip condition
+	* common.c (cob_strdup): minor performance improvement
+	* common.c (cob_gettmpdir): ensure TMPDIR without trailing slash
+
+2020-11-08  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c, common.h: new function signature cob_check_ref_mod
+	  (3.x had new function cob_check_ref_mod_detailed) and
+	  cob_check_ref_mod_minimal for adjusted check of COB_EC_BOUND_REF_MOD
 
 2021-11-08  Ron Norman <rjn@inglenet.com>
 
@@ -57,6 +478,14 @@
 	  needs to be checked later if undefine of HAVE_LANGINFO_CODESET is
 	  reasonable
 
+2021-11-01  Simon Sobisch <simonsobisch@gnu.org>
+
+	* coblocal.h: adjusted ISFINITE definition
+	* coblocal.h: removed 'extern "C"' as this header should not
+	  be externally included
+	* common.h, coblocal.h: moved _MSC_VER comparison macros as those are
+	  not relevant to user-space
+
 2021-10-26  Ron Norman <rjn@inglenet.com>
 
 	* common.h: Fields added to cob_file for MF style LINE ADVANCING files
@@ -70,6 +499,11 @@
 				to handle the case of the FCD being used for more
 				than one open file
 	* fextfh.c: Removed update of FCD-NAME-LENGTH
+
+2021-10-06  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (cob_get_environment, cob_display_environment): move strlen
+	  out of a loop
 
 2021-10-04  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -135,15 +569,15 @@
 	* reportio.c (cob_report_generate): backport of 2021-09-26 change
 	* common.c (cob_gettmpdir): fix to remove trailing slash
 
+2021-09-26  Ron Norman <rjn@inglenet.com>
+
+	* reportio.c: Fixed to call back to DECLARATIVES for DETAIL line
+
 2021-09-26  Christian Lademann <christian@lademann.online>
 
 	* termio.c, screenio.c: recognize 3-byte crt_status item and fill it
 	  according to X/Open standard (CRT STATUS byte 3 will always be NULL).
 	  The format of CRT STATUS depends on type and size of the defined item.
-
-2021-09-26  Ron Norman <rjn@inglenet.com>
-
-	* reportio.c: Fixed to call back to DECLARATIVES for DETAIL line
 
 2021-09-21  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -400,7 +834,7 @@
 2021-02-25  Ron Norman <rjn@inglenet.com>
 
 	* fileio.c: Some additional checks to select appropriate I/O routine
-			if the ISAM files are to be VB-ISAM format instead of C-ISAM
+	  if the ISAM files are to be VBISAM format instead of C-ISAM
 
 2021-02-25  Ron Norman <rjn@inglenet.com>
 
@@ -419,16 +853,16 @@
 
 2021-02-19  Ron Norman <rjn@inglenet.com>
 
-	* fileio.h: When checking INDEXED file format, if VB-ISAM
-				and V-ISAM configured then use V-ISAM
+	* fileio.h: When checking INDEXED file format, if VBISAM
+	  and V-ISAM configured prefer use of newer V-ISAM
 
 2021-02-18  Ron Norman <rjn@inglenet.com>
 
-	* V-ISAM is a reworked VB-ISAM that dynamically supports
-	  the old VB-ISAM file format as well as C-ISAM at runtime
-	* common.h,common.c: Changes to replace VB-CISAM with V-ISAM
-	* fileio.h,fileio.c: Changes to replace VB-CISAM with V-ISAM
-	* Makefile.am,libcobvc.c: Changes to replace VB-CISAM with V-ISAM
+	Adjustments for V-ISAM, a reworked VBISAM that dynamically supports
+	the old VBISAM file format as well as C-ISAM at runtime
+	* common.h, common.c: Changes to replace VB-CISAM with V-ISAM
+	* fileio.h, fileio.c: Changes to replace VB-CISAM with V-ISAM
+	* Makefile.am, libcobvc.c: Changes to replace VB-CISAM with V-ISAM
 	* fisam.c: Changes to replace VB-CISAM with V-ISAM
 	         For OPEN OUTPUT and the file does exist, it checks on the file
 	         format and retains that for the 'isbuild'
@@ -474,7 +908,7 @@
 
 	* fileio.c: Added a few more checks with possible error message during
 	  ROLLBACK processing if the QBL file has a problem being read
-	* termio.c: Added bounds check to avoid core dump on Centos 6.8
+	* termio.c (display_alnum_dump): added bounds check to fix invalid reads
 	* fsqlxfd.c: Check for COB_SQL_HIGH_VALUE to hold some hex characters
 	  that should be used to replace HIGH-VALUES for fields used are
 	  part of a WHERE clause (i.e. START statement)
@@ -488,6 +922,16 @@
 
 	* fodbc.c: PostgreSQL requires a SQLCloseCursor just before SQLExecute
 	  if the statement had been used before.
+
+2021-02-08  Simon Sobisch <simonsobisch@gnu.org>
+
+	* coblocal.h (COB_D2I): only use the half-byte of the char to resolve the
+	  integer value, preventing overflows leading to huge/negative values and
+	  providing conversion of space to zero and correct conversion of numeric
+	  character from both ASCII and EBCDIC to integer
+	* move.c: use of COB_D2I for conversions
+	  and restore previous one afterwards
+	* move.c (store_common_region): minor refactoring
 
 2021-02-08  Ron Norman <rjn@inglenet.com>
 
@@ -578,13 +1022,13 @@
 	* fileio.c: Added a flag 'config' to the table of I/O modules
 	            so that it is now which ones had been configured 
 	* fisam.c: Additional work for ISAM logging/transaction ability
-	           VB-ISAM 2.2 in default and CISAM mode works fine
+	           VBISAM 2.2 in default and C-ISAM mode works fine
 	           D-ISAM 7.2 is also working in transaction mode
 
 2021-01-10  Ron Norman <rjn@inglenet.com> 
 
 	* fisam.c: Additional work for ISAM logging/transaction ability
-	           VB-ISAM 2.2 in default and CISAM mode works fine
+	           VBISAM 2.2 in default and C-ISAM mode works fine
 	           D-ISAM 7.0 is not working in transaction mode
 	           and it may be that D-ISAM 7.2 or better is required
 
@@ -594,6 +1038,10 @@
 	            and then skip commit/rollback if no modification
 	* fisam.c: Code added for use of ISAM logging/transaction ability
 	* foci.c, fodbc.c: Set on flag_log_support always
+
+2021-01-08  Simon Sobisch <simonsobisch@gnu.org>
+
+	* fileio.c (set_dbt)->fbdb.c: fix bug #701 bad initialization with DB_HOME
 
 2021-01-07  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -653,12 +1101,12 @@
 
 2020-12-16  Ron Norman <rjn@inglenet.com>
 
-	* common.h: Changes to handle VBISAM in CISAM mode
-	* common.c: Changes to report using VBISAM in CISAM mode
+	* common.h: Changes to handle VBISAM in C-ISAM mode
+	* common.c: Changes to report using VBISAM in C-ISAM mode
 	* fileio.c: Changes to handle "format=vbcisam"
 			    and to load libcobvc.so at startup
-	* fisam.c: Changes for building with VBISAM in CISAM mode
-	* Makefile.am: Changes for configure/build of VBISAM in CISAM mode
+	* fisam.c: Changes for building with VBISAM in C-ISAM mode
+	* Makefile.am: Changes for configure/build of VBISAM in C-ISAM mode
 				
 2020-12-15  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -709,6 +1157,20 @@
 	* termio.c (cob_dump_field): fixes for non-standard 01 OCCURS for "same as"
 	* termio.c (cob_dump_field): postpone output of "same as" to gather multiple
 	  identical entries into the same line as "XYZ (1,2..20) same as (1)"
+
+2020-11-29  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c: limit sscanf width for strings
+	* common.c (set_config_val): removed duplicate check for
+	  ptr (!= 0 && == ' ')
+	* call.c, common.c, fileio.c, intrinsic.c, mlio.c, strings.c:
+	  reduced scope of some variables
+
+2020-11-27  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c, common.h: added externalized cob_nop to have a portable way to
+	  ensure some optimizations on C level not be done (currently: not removing
+	  #line references)
 
 2020-11-26  Ron Norman <rjn@inglenet.com>
 
@@ -853,7 +1315,9 @@
 2020-08-31  Simon Sobisch <simonsobisch@gnu.org>
 
 	* strings.c: huge performance improvements for INSPECT by splitting
-	  the internal pseudo-marker into separate marker+replacement
+	  the internal pseudo-marker "inspect mark" into separate char arrays
+	  for marker and replacement: inspect_mark + inspect_repdata
+	* strings.c: replace magic numbers in inspect_common to enum inspect_type
 
 2020-08-24  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -872,6 +1336,13 @@
 	* common.c: also handle SIGEMT; skip module dump for SIGTERM and SIGINT
 
 2020-08-17  Simon Sobisch <simonsobisch@gnu.org>
+
+	* common.c (struct exit_handlerlist, cob_sys_exit_proc):
+	  added priority for exit handler,
+	  correct return for install_flag 2 (query) if entry not registered
+	* common.c (cob_sys_exit_proc, cob_sys_error_proc):
+	  fix bad free for re-entry / delete of existing exit/error handler,
+	  added  ACU variant (currently deactivated)
 
 	work on installable error handlers (per MF and ACU)
 	* common.c (cob_runtime_error): remove error handler from the que before
@@ -1399,7 +1870,7 @@
 	* Makefile.am Updated for multiple xISAM
 	* libcobci.c - builds fisam.c for C-ISAM
 	* libcobdi.c - builds fisam.c for D-ISAM
-	* libcobvb.c - builds fisam.c for VB-ISAM
+	* libcobvb.c - builds fisam.c for VBISAM
 
 2019-10-20  Ron Norman <rjn@inglenet.com>
 
@@ -1419,7 +1890,7 @@
 	* fileio.h added with common definitions for all fileio modules
 	* flmdb.c copied from isam-lmdb branch
 	* You can now configure multiple INDEXED file handlers but only one of
-	  C-ISAM, D-ISAM or VB-ISAM
+	  C-ISAM, D-ISAM or VBISAM
 
 2019-10-15  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -1469,8 +1940,13 @@
 
 2019-08-27  Ron Norman <rjn@inglenet.com>
 
-	* fileio.c: Clean up 'fcd' tables dynamically allocated via free_extfh_fcd
-	            fix some compile warnings
+	* fileio.c: clean up 'fcd' tables dynamically allocated via
+	  free_extfh_fcd, fix some compile warnings
+
+2019-08-25  Simon Sobisch <simonsobisch@gnu.org>
+
+	* fileio.c [WITH_DB]->fbdb.c: minor refactoring - limit scope of some
+	  variables, extracted (set_dbt) from (lock_record, test_record_lock)
 
 2019-08-17  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -1692,7 +2168,7 @@
 2019-03-12  Simon Sobisch <simonsobisch@gnu.org>
 
 	* common.c (print_info): changed msgid for "file handler" and output
-	  if RTD-version of VB-ISAM is used, partially after Ron Norman
+	  if RTD-version of VBISAM is used, partially after Ron Norman
 
 2015-03-03  Ron Norman
 
@@ -2491,11 +2967,12 @@
 	  for DISPLAY screen, too
 
 2017-05-02 Ron Norman <rjn@inglenet.com>
+
 	* common.c,coblocal.h: added 'cob_keycheck' to indicate if INDEXED file
 	  keys must match exactly. Default is TRUE
 	* fileio.c:
 	  Add code to handle 'keycheck' in IO_filename env var.
-	  Added code to indexed_open for C|D|VB-ISAM files to handle keycheck
+	  Added code to indexed_open for ISAM files to handle keycheck
 
 2017-05-01  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -2508,6 +2985,7 @@
 	  for cob_s64_t (CB_FMT_LLD)
 
 2017-04-27 Ron Norman <rjn@inglenet.com>
+
 	* move.c: added 'cob_alloc_move' used to copy data for BY VALUE params
 	* common.c,common.h: added 'cob_get_hase_name' used to create has value
 	  added 'cob_alloc_attr' to create working 'cob_field_attr'
@@ -2757,7 +3235,7 @@
 	  and RETRY clauses on all I/O statements.
 	  Relative files use sigaction/alarm/fcntl to wait for
 	  record locks.
-	  C/D/VB-ISAM files use the ISAM handle functions combined with
+	  ISAM files use the ISAM handle functions combined with
 	  a wait/retry loop. each loop happens at 125ms interval.
 	  BDB code updated to use none deprecated functions, use some
 	  subroutines instead of inline code and changes for SHARING/RETRY
@@ -3415,7 +3893,7 @@
 
 	* fileio.c updated to return correct status codes for WRITE/REWRITE
 	  related to duplicate keys being detected
-	  This was tested with BDB, D-ISAM and VB-ISAM 2.1.1
+	  This was tested with BDB, D-ISAM and VBISAM 2.1.1
 
 2015-02-26  Simon Sobisch <simonsobisch@gnu.org>
 
@@ -3429,15 +3907,15 @@
 
 2015-02-26  Ron Norman <rjn@inglenet.com>
 
-	* fileio.c [WITH_VBISAM, VB_RTD]: updated to handle VB-ISAM 2.1.1
+	* fileio.c [WITH_VBISAM, VB_RTD]: updated to handle VBISAM 2.1.1
 	* fileio.c [WITH_DB]: handle sparse and split keys for BDB
-	  This was tested with BDB, D-ISAM, VB-ISAM 2.0 and VB-ISAM 2.1.1
+	  This was tested with BDB, D-ISAM, VBISAM 2.0 and VBISAM 2.1.1
 
 2015-02-23  Ron Norman <rjn@inglenet.com>
 
 	Implemented INDEXED file support for sparse and split keys FR #23 + FR #281
 	* fileio.c: updated to handle sparse and split keys
-	  This was tested with D-ISAM and VB-ISAM 2.0
+	  This was tested with D-ISAM and VBISAM 2.0
 
 2015-02-18  Ron Norman <rjn@inglenet.com>
 
@@ -3996,12 +4474,12 @@
 
 2007-11-21  Roger While <simrw@sim-basis.de>
 
-	* fileio.c: Add C/D/VB-ISAM code
+	* fileio.c: add ISAM (C-ISAM/D-ISAM/VBISAM) code
 
 2007-11-20  Roger While <simrw@sim-basis.de>
 
 	* fileio.c: Cater for 02 return status
-	  Put in hooks for C/D/VB-ISAM
+	  Put in hooks for ISAM (C-ISAM/D-ISAM/VBISAM) code
 
 2007-11-09  Roger While <simrw@sim-basis.de>
 
@@ -5666,7 +6144,7 @@
 	  (cob_init_call): Initialize 'dynamic_reloading'.
 
 
-Copyright 2002-2021 Free Software Foundation, Inc.
+Copyright 2002-2022 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification, are
 permitted provided the copyright notice and this notice are preserved.

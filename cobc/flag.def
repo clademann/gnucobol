@@ -1,6 +1,7 @@
 /*
-   Copyright (C) 2003-2012, 2014-2021 Free Software Foundation, Inc.
-   Written by Keisuke Nishida, Roger While, Simon Sobisch
+   Copyright (C) 2003-2012, 2014-2022 Free Software Foundation, Inc.
+   Written by Keisuke Nishida, Roger While, Simon Sobisch, Ron Norman,
+   Edward Hart
 
    This file is part of GnuCOBOL.
 
@@ -54,11 +55,6 @@ CB_FLAG_RQ (cb_fold_copy, 1, "fold-copy", 0, 4,
 CB_FLAG_RQ (cb_fold_call, 1, "fold-call", 0, 5,
 	_("  -ffold-call=[UPPER|LOWER]\tfold PROGRAM-ID, CALL, CANCEL subject to value\n"
 	  "                        * default: no transformation"))
-
-CB_FLAG_RQ (cb_default_byte, 1, "defaultbyte", -1, 6,
-	_("  -fdefaultbyte=<value>\tinitialize fields without VALUE to value\n"
-	  "                        * decimal 0..255 or any quoted character\n"
-	  "                        * default: initialize to picture"))
 
 CB_FLAG_RQ (cb_max_errors, 1, "max-errors", 128, 7,
 	_("  -fmax-errors=<number>\tmaximum number of errors to report before\n"
@@ -119,17 +115,15 @@ CB_FLAG (cb_flag_alt_ebcdic, 0, "alternate-ebcdic",
 CB_FLAG (cb_flag_extra_brace, 0, "extra-brace",
 	_("  -fextra-brace         generate extra braces in C source"))
 
-CB_FLAG (cb_flag_c_line_directives, 0, "gen-c-line-directives",
-	_("  -fgen-c-line-directives\tgenerate source location directives in C code"))
-
-CB_FLAG (cb_flag_c_labels, 0, "gen-c-labels",
-	_("  -fgen-c-labels       generate extra labels in C sources"))
-
 CB_FLAG (cb_flag_correct_numeric, 0, "correct-numeric",
 	_("  -fcorrect-numeric     attempt correction of invalid numeric display items"))
 
 CB_FLAG (cb_flag_stack_on_heap, 0, "stack-on-heap",
 	_("  -fstack-on-heap       PERFORM stack allocated on heap"))
+
+CB_FLAG (cb_flag_stack_extended, 1, "stack-extended",
+	_("  -fstack-extended      store origin of entrypoints and PERFORM\n"
+	  "                        * turned on by -debug/-dump"))
 
 CB_FLAG_ON (cb_flag_fast_math, 0, "fast-math",
 	_("  -ffast-math           Disables emitting faster arithmetic logic"))
@@ -173,6 +167,12 @@ CB_FLAG (cb_flag_stack_check, 1, "stack-check",
 	_("  -fstack-check         PERFORM stack checking\n"
 	  "                        * turned on by -debug or -g"))
 
+CB_FLAG (cb_flag_section_exit_check, 1, "section-exit-check",
+	_("  -fsection-exit-check  check that code execution does not leave the scope of SECTIONs"))
+
+CB_FLAG (cb_flag_implicit_goback_check, 1, "implicit-goback-check",
+	_("  -fimplicit-goback-check\tcheck that code execution does not end implicit at end of PROCEDURE DIVISION"))
+
 CB_FLAG (cb_flag_write_after, 1, "write-after",
 	_("  -fwrite-after         use AFTER 1 for WRITE of LINE SEQUENTIAL\n"
 	  "                        * default: BEFORE 1"))
@@ -210,6 +210,12 @@ CB_FLAG (cb_flag_static_call, 1, "static-call",
 CB_FLAG_ON (cb_flag_c_decl_for_static_call, 1, "gen-c-decl-static-call",
 	_("  -fno-gen-c-decl-static-call\tdisable generation of C function declations\n"
 	  "                        for subroutines with static CALL"))
+
+CB_FLAG (cb_flag_c_line_directives, 0, "gen-c-line-directives",
+	_("  -fgen-c-line-directives\tgenerate source location directives in C code"))
+
+CB_FLAG (cb_flag_c_labels, 0, "gen-c-labels",
+	_("  -fgen-c-labels       generate extra labels in C sources"))
 
 CB_FLAG (cb_mf_files, 1, "mf-files",
 	 _("  -fmf-files            Sequential & Relative files will match Micro Focus format"))

@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2004-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Roger While, Simon Sobisch, Brian Tiffin
 
    This file is part of GnuCOBOL.
@@ -18,6 +18,7 @@
    along with GnuCOBOL.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "tarstamp.h"
 #include "config.h"
 
 #include <stdio.h>
@@ -32,11 +33,9 @@
 #include <unistd.h>
 #endif
 
-#include "libcob/sysdefines.h"
-#include "libcob.h"
-#include "tarstamp.h"
-
-#include "libcob/cobgetopt.h"
+#include "../libcob/common.h"
+#include "../libcob/cobgetopt.h"
+#include "../libcob/sysdefines.h"
 
 static int arg_shift = 1;
 static int print_runtime_wanted = 0;
@@ -54,6 +53,7 @@ static const struct option long_options[] = {
 	{"verbose",		CB_NO_ARG, NULL, 'v'},
 	{"brief",		CB_NO_ARG, NULL, 'q'},
 	{"info",		CB_NO_ARG, NULL, 'i'},
+	{"dumpversion",		CB_NO_ARG, NULL, '~'},	/* format: GCC dumpfullversion */
 	{"runtime-config",		CB_NO_ARG, NULL, 'r'},
 	{"config",		CB_RQ_ARG, NULL, 'C'},
 	{"module",		CB_RQ_ARG, NULL, 'm'},
@@ -61,7 +61,7 @@ static const struct option long_options[] = {
 };
 
 #ifdef ENABLE_NLS
-#include "gettext.h"	/* from lib/ */
+#include "../lib/gettext.h"
 #define _(s)		gettext(s)
 #define N_(s)		gettext_noop(s)
 #else
@@ -85,7 +85,7 @@ cobcrun_print_version (void)
 	memset (month, 0, sizeof(month));
 	day = 0;
 	year = 0;
-	status = sscanf (__DATE__, "%s %d %d", month, &day, &year);
+	status = sscanf (__DATE__, "%63s %d %d", month, &day, &year);
 	/* LCOV_EXCL_START */
 	if (status != 3) {
 		snprintf (cob_build_stamp, (size_t)COB_MINI_MAX,
@@ -97,7 +97,7 @@ cobcrun_print_version (void)
 	}
 
 	printf ("cobcrun (%s) %s.%d\n", PACKAGE_NAME, PACKAGE_VERSION, PATCH_LEVEL);
-	puts ("Copyright (C) 2021 Free Software Foundation, Inc.");
+	puts ("Copyright (C) 2022 Free Software Foundation, Inc.");
 	printf (_("License GPLv3+: GNU GPL version 3 or later <%s>"), "https://gnu.org/licenses/gpl.html");
 	putchar ('\n');
 	puts (_("This is free software; see the source for copying conditions.  There is NO\n"
@@ -125,7 +125,8 @@ cobcrun_print_usage (char * prog)
 	putchar ('\n');
 	puts (_("Options:"));
 	puts (_("  -h, --help                      display this help and exit"));
-	puts (_("  -V, --version                   display cobcrun and runtime version and exit"));
+	puts (_("  -V, --version                   display version information for cobcrun + runtime and exit"));
+	puts (_("  -dumpversion                    display runtime version and exit"));
 	puts (_("  -i, --info                      display runtime information (build/environment)"));
 	puts (_("  -v, --verbose                   display extended output with --info"));
 #if 0 /* Simon: currently only removing the path from cobcrun in output --> don't show */
@@ -197,10 +198,18 @@ cobcrun_initial_module (char *module_argument)
 	/* LCOV_EXCL_START */
 	if (!module_argument) {
 		/* never reached (getopt ensures that we have an argument),
-		   just in to keep the analyzer happy */
+		   just in to keep the analyzer happy, so msg untranslated */
 		return "missing argument";
-	}
 	/* LCOV_EXCL_STOP */
+	} else if (module_argument[0] == 0) {
+		return "";	/* used as "no further information" */
+	}
+
+#if 0	/* CHECKME: Do we want that validation here or handle it? */
+	if (strchr (module_argument, PATHSEP_CHAR)) {
+		return ("should not contain '%c'", PATHSEP_CHAR);
+	}
+#endif
 
 	/* See if we have a /dir/path/module, or a /dir/path/ or a module (no slash) */
 	cobcrun_split_path_file (&pathname, &filename, module_argument);
@@ -224,7 +233,7 @@ cobcrun_initial_module (char *module_argument)
 		/* TODO: check content, see libcob/common.h */
 		envptr = getenv ("COB_PRE_LOAD");
 		if (envptr
-			&& strlen (envptr) + strlen (filename) + 1 < COB_MEDIUM_MAX) {
+		 && strlen (envptr) + strlen (filename) + 1 < COB_MEDIUM_MAX) {
 			memset (env_space, 0, COB_MEDIUM_BUFF);
 			snprintf (env_space, COB_MEDIUM_MAX, "%s%c%s", filename,
 				PATHSEP_CHAR, envptr);
@@ -247,6 +256,7 @@ process_command_line (int argc, char *argv[])
 	int			c, idx;
 	const char		*err_msg;
 	
+	cob_setup_env (argv[0]);
 #if defined (_WIN32) || defined (__DJGPP__)
 	if (!getenv ("POSIXLY_CORRECT")) {
 		/* Translate command line arguments from DOS/WIN to UNIX style */
@@ -275,7 +285,8 @@ process_command_line (int argc, char *argv[])
 		case 'C':
 			/* -c <file>, --config=<file> */
 			/* LCOV_EXCL_START */
-			if (strlen (cob_optarg) > COB_SMALL_MAX) {
+			if (cob_optarg[0] == 0
+			 || strlen (cob_optarg) > COB_SMALL_MAX) {
 				fputs (_("invalid configuration file name"), stderr);
 				putc ('\n', stderr);
 				fflush (stderr);
@@ -334,6 +345,11 @@ process_command_line (int argc, char *argv[])
 			}
 			exit (EXIT_SUCCESS);
 
+		case '~':
+			/* -dumpversion */
+			puts (libcob_version());
+			exit (EXIT_SUCCESS);
+
 		case 'M':
 		case 'm':
 			/* -M <module>, --module=<module> */
@@ -341,8 +357,11 @@ process_command_line (int argc, char *argv[])
 			err_msg = cobcrun_initial_module (cob_optarg);
 			if (err_msg != NULL) {
 				fprintf (stderr, _("invalid module argument '%s'"), cob_optarg);
-				putc ('\n', stderr);
-				fputs (err_msg, stderr);
+				if (err_msg[0]) {
+					fprintf (stderr, "; %s\n", err_msg);
+				} else {
+					fputc ('\n', stderr);
+				}
 				fflush (stderr);
 				exit (EXIT_FAILURE);
 			}

@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2001-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch, Edward Hart
 
    This file is part of GnuCOBOL.
@@ -66,6 +66,11 @@ CB_CONFIG_INT (cb_lit_length, "literal-length", 1, COB_MAX_LITERAL_LEN, _("<numb
 CB_CONFIG_INT (cb_numlit_length, "numeric-literal-length", 1, COB_MAX_DIGITS, CB_XRANGE(1,COB_MAX_DIGITS),
 	_("maximum numeric literal size"))
 
+CB_CONFIG_SINT (cb_default_byte, "defaultbyte", -1, 255, _("<number>"),
+	_("initialize fields without VALUE to <number>\n"
+	  "                        * decimal 0..255 representing a character\n"
+	  "                        * default: initialize to picture"))
+
 CB_CONFIG_INT (cb_align_record, "align-record", 0, 256, CB_XRANGE(0,256),
 	_("align WORKING-STORAGE/LOCAL-STORAGE record on boundary"))
 
@@ -117,6 +122,9 @@ CB_CONFIG_BOOLEAN (cb_larger_redefines_ok, "larger-redefines-ok", /* TO-DO: chan
 
 CB_CONFIG_BOOLEAN (cb_relaxed_syntax_checks, "relax-syntax-checks",
 	_("allow certain syntax variations (e.g. REDEFINES position)"))
+
+CB_CONFIG_BOOLEAN (cb_ref_mod_zero_length, "ref-mod-zero-length",
+	_("allow zero length reference-modification (only changed with EC-BOUND-REF-MOD active)"))
 
 CB_CONFIG_BOOLEAN (cb_relax_level_hierarchy, "relax-level-hierarchy",
 	_("allow non-matching level numbers"))
@@ -411,3 +419,7 @@ CB_CONFIG_SUPPORT (cb_assign_disk_from, "assign-disk-from",
 
 CB_CONFIG_SUPPORT (cb_vsam_status, "vsam-status",
 	_("VSAM status in FILE STATUS"))
+		
+CB_CONFIG_SUPPORT (cb_self_call_recursive, "self-call-recursive",
+	_("CALL to own PROGRAM-ID implies RECURSIVE attribute"))
+

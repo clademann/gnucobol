@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2007-2012, 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2007-2012, 2014-2022 Free Software Foundation, Inc.
    Written by Roger While, Simon Sobisch, Ron Norman
 
    This file is part of GnuCOBOL.
@@ -22,16 +22,19 @@
 #ifndef COB_LOCAL_H
 #define COB_LOCAL_H
 
-#ifdef	HAVE_STRINGS_H
-#include <strings.h>
-#endif
-
 /* We use this file to define/prototype things that should not be
    exported to user space
 */
 
+#ifdef	HAVE_STRINGS_H
+#include <strings.h>
+#endif
+
 #ifdef HAVE_ISFINITE
 #define ISFINITE isfinite
+#elif	defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
+#include <float.h>
+#define	ISFINITE		_finite
 #else
 #define ISFINITE finite
 #endif
@@ -45,7 +48,7 @@
 
 
 #ifdef ENABLE_NLS
-#include "gettext.h"	/* from lib/ */
+#include "../lib/gettext.h"
 #define _(s)		gettext(s)
 #define N_(s)		gettext_noop(s)
 #else
@@ -54,8 +57,7 @@
 #endif
 
 
-#include <../libcob/cobinternal.h>
-#include "cobcapi.h"
+#include "cobinternal.h"
 
 #ifndef	F_OK
 #define	F_OK		0
@@ -174,8 +176,8 @@
 #endif
 
 /* Convert between a digit and an integer (e.g., '0' <-> 0) */
-#define COB_D2I(x)		((x) - '0')
-#define COB_I2D(x)		(char) ((x) + '0')
+#define COB_D2I(x)		((x) & 0x0F)
+#define COB_I2D(x)		(char) ('0' + (x))
 
 #define	COB_MODULE_PTR		cobglobptr->cob_current_module
 #define	COB_TERM_BUFF		cobglobptr->cob_term_buff
@@ -191,10 +193,6 @@
 #define	COB_MOUSE_FLAGS	cobsetptr->cob_mouse_flags
 #define	COB_MOUSE_INTERVAL	cobsetptr->cob_mouse_interval
 #define	COB_USE_ESC		cobsetptr->cob_use_esc
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Global settings structure */
 
@@ -304,6 +302,9 @@ typedef struct __cob_settings {
 
 	char		*cob_dump_filename;	/* Place to write dump of variables */
 	int		cob_dump_width;		/* Max line width for dump */
+	unsigned int	cob_core_on_error;		/* signal handling and possible raise of SIGABRT
+											   / creation of coredumps on runtime errors */
+	char		*cob_core_filename;	/* filename for coredump creation */
 } cob_settings;
 
 
@@ -358,6 +359,24 @@ struct config_tbl {
 
 #define SETPOS(member)	offsetof(cob_settings,member),sizeof(cobsetptr->member),0,0
 
+/* max sizes */
+
+/* Maximum bytes in a single/group field,
+   which doesn't contain UNBOUNDED items */
+   /* TODO: add compiler configuration for limiting this */
+#ifndef COB_64_BIT_POINTER
+#define	COB_MAX_FIELD_SIZE	268435456
+#else
+#define	COB_MAX_FIELD_SIZE	2147483646
+#endif
+
+/* Maximum bytes in an unbounded table entry
+   (IBM: old 999999998, current 999999999) */
+#ifndef COB_64_BIT_POINTER
+#define	COB_MAX_UNBOUNDED_SIZE	999999999
+#else
+#define	COB_MAX_UNBOUNDED_SIZE	2147483646
+#endif
 
 /* Local function prototypes */
 COB_EXPIMP const char * cob_io_version	(const int, const int);
@@ -374,14 +393,22 @@ COB_HIDDEN void		cob_init_move		(cob_global *, cob_settings *);
 COB_HIDDEN void		cob_init_screenio	(cob_global *, cob_settings *);
 COB_HIDDEN void		cob_init_mlio		(cob_global * const);
 
+COB_HIDDEN const char *cob_statement_name[STMT_MAX_ENTRY];
+
 COB_HIDDEN void		cob_print_field		(FILE *, cob_field *, int, int);
 COB_HIDDEN void		cob_module_clean	(cob_module *);
 
+COB_HIDDEN void		cob_check_trace_file (void);
+
 COB_HIDDEN char		*cob_get_filename_print	(cob_file *, const int);
 COB_HIDDEN void		cob_fork_fileio		(cob_global *, cob_settings *);
+
+COB_HIDDEN void		cob_file_fcd_sync	(cob_file*);
+COB_HIDDEN void		cob_fcd_file_sync	(cob_file*, char*);
 COB_HIDDEN void		free_extfh_fcd		(void);
 
 COB_HIDDEN void		cob_exit_screen		(void);
+COB_HIDDEN void		cob_exit_screen_from_signal	(int);
 COB_HIDDEN void		cob_exit_numeric	(void);
 COB_HIDDEN void		cob_exit_fileio_msg_only	(void);
 COB_HIDDEN void		cob_exit_fileio		(void);
@@ -414,6 +441,7 @@ COB_HIDDEN void		cob_screen_set_mode	(const cob_u32_t);
 COB_HIDDEN void		cob_settings_screenio	(void);
 
 COB_HIDDEN int		cob_get_last_exception_code	(void);
+COB_HIDDEN void		cob_add_exception (const int);
 COB_HIDDEN int		cob_check_env_true	(char*);
 COB_HIDDEN int		cob_check_env_false	(char*);
 COB_HIDDEN const char	*cob_get_last_exception_name	(void);
@@ -427,6 +455,8 @@ COB_HIDDEN FILE			*cob_get_dump_file	(void);
 
 COB_HIDDEN char		*cob_strcat		(char*, char*, int);
 COB_HIDDEN char		*cob_strjoin		(char**, int, char*);
+
+COB_HIDDEN void		cob_runtime_warning_ss (const char *, const char *);
 
 COB_HIDDEN void	cob_set_field_to_uint	(cob_field *, const cob_u32_t);
 COB_EXPIMP int cob_ncase_cmp (char *, const char *, unsigned );
@@ -449,9 +479,5 @@ cob_max_int (const int x, const int y)
 }
 
 #include	<libcob/screenio-common.h>	// Definitions
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif	/* COB_LOCAL_H */

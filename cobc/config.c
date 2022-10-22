@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2003-2012, 2014-2017, 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2003-2012, 2014-2017, 2019-2022 Free Software Foundation, Inc.
    Written by Keisuke Nishida, Roger While, Simon Sobisch
 
    This file is part of GnuCOBOL.
@@ -49,6 +49,7 @@ enum cb_config_type {
 
 #define CB_CONFIG_ANY(type,var,name,doc)	type		var = (type)0;
 #define CB_CONFIG_INT(var,name,min,max,odoc,doc)	unsigned int		var = 0;
+#define CB_CONFIG_SINT(var,name,min,max,odoc,doc)	int		var = -1;
 #define CB_CONFIG_SIZE(var,name,min,max,odoc,doc)	unsigned long		var = 0;
 #define CB_CONFIG_STRING(var,name,doc)	const char	*var = NULL;
 #define CB_CONFIG_BOOLEAN(var,name,doc)	int		var = 0;
@@ -58,6 +59,7 @@ enum cb_config_type {
 
 #undef	CB_CONFIG_ANY
 #undef	CB_CONFIG_INT
+#undef	CB_CONFIG_SINT
 #undef	CB_CONFIG_SIZE
 #undef	CB_CONFIG_STRING
 #undef	CB_CONFIG_BOOLEAN
@@ -70,9 +72,11 @@ enum cb_config_type {
 #define CB_CONFIG_ANY(type,var,name,doc)	, {CB_ANY, name, (void *)&var}
 #if COBC_STORES_CONFIG_VALUES
 #define CB_CONFIG_INT(var,name,min,max,odoc,doc)	, {CB_INT, name, (void *)&var, NULL, min, max}
+#define CB_CONFIG_SINT(var,name,min,max,odoc,doc)	, {CB_INT, name, (void *)&var, NULL, min, max}
 #define CB_CONFIG_SIZE(var,name,min,max,odoc,doc)	, {CB_SIZE, name, (void *)&var, NULL, min, max}
 #else
 #define CB_CONFIG_INT(var,name,min,max,odoc,doc)	, {CB_INT, name, (void *)&var, 0, min, max}
+#define CB_CONFIG_SINT(var,name,min,max,odoc,doc)	, {CB_INT, name, (void *)&var, 0, min, max}
 #define CB_CONFIG_SIZE(var,name,min,max,odoc,doc)	, {CB_SIZE, name, (void *)&var, 0, min, max}
 #endif
 #define CB_CONFIG_STRING(var,name,doc)	, {CB_STRING, name, (void *)&var}
@@ -112,6 +116,7 @@ static struct config_struct {
 
 #undef	CB_CONFIG_ANY
 #undef	CB_CONFIG_INT
+#undef	CB_CONFIG_SINT
 #undef	CB_CONFIG_SIZE
 #undef	CB_CONFIG_STRING
 #undef	CB_CONFIG_BOOLEAN
@@ -245,9 +250,9 @@ split_and_iterate_on_comma_separated_str (
 			}
 		default:
 			if (transform_case == 1) {
-				word_buff[j++] = (char)toupper ((int)val[i]);
+				word_buff[j++] = (char)cb_toupper ((unsigned char)val[i]);
 			} else if (transform_case == 2) {
-				word_buff[j++] = (char)tolower ((int)val[i]);
+				word_buff[j++] = (char)cb_tolower ((unsigned char)val[i]);
 			} else {;
 				word_buff[j++] = val[i];
 			}
@@ -265,7 +270,6 @@ static int
 cb_load_conf_file (const char *conf_file, const enum cb_include_type include_type)
 {
 	FILE	*fp;
-	char	buff[COB_SMALL_BUFF];
 	char	filename[COB_NORMAL_BUFF];
 	struct	include_list	*c, *cc;
 	int	i, ret;
@@ -282,13 +286,17 @@ cb_load_conf_file (const char *conf_file, const enum cb_include_type include_typ
 			}
 			filename[0] = 0;
 			if (c && c->name) {
-				strncpy (buff, conf_includes->name, (size_t)COB_SMALL_MAX);
-				buff[COB_SMALL_MAX] = 0;
-				for (i = (int)strlen (buff); i != 0 && buff[i] != SLASH_CHAR; i--);
-				if (i != 0) {
-					buff[i] = 0;
-					snprintf (filename, (size_t)COB_NORMAL_MAX, "%s%c%s", buff, SLASH_CHAR, conf_file);
-					filename[COB_NORMAL_MAX] = 0;
+				const size_t conf_file_namelen = strlen (conf_file);
+				/* check for path separator in include name */
+				for (i = (int)strlen (conf_includes->name);
+					i != 0 && conf_includes->name[i] != SLASH_CHAR;
+					i--);
+
+				/* if there is an actuall path and it isn't too long,
+				   then prefix it to get the filename */
+				if (i != 0 && i < sizeof (filename) - conf_file_namelen - 2) {
+					memcpy (filename, conf_includes->name, i); /* copy with separator */
+					memcpy (filename + i, conf_file, conf_file_namelen + 1); /* copy with trailing NULL */
 					if (access (filename, F_OK) == 0) {	/* and prefixed file exist */
 						conf_file = filename;		/* Prefix last directory */
 					} else {
@@ -298,9 +306,10 @@ cb_load_conf_file (const char *conf_file, const enum cb_include_type include_typ
 			}
 			if (filename[0] == 0) {
 				/* check for COB_CONFIG_DIR (use default if not in environment) */
-				snprintf (filename, (size_t)COB_NORMAL_MAX, "%s%c%s", cob_config_dir, SLASH_CHAR, conf_file);
-				filename[COB_NORMAL_MAX] = 0;
-				if (access (filename, F_OK) == 0) {	/* and prefixed file exist */
+				const int size = snprintf (filename, (size_t)COB_NORMAL_MAX,
+					"%s%c%s", cob_config_dir, SLASH_CHAR, conf_file);
+				if (size < COB_NORMAL_MAX	/* no overflow - full name available */
+				 && access (filename, F_OK) == 0) {	/* and prefixed file exist */
 					conf_file = filename;		/* Prefix COB_CONFIG_DIR */
 				}
 			}
@@ -430,6 +439,8 @@ cb_load_conf (const char *fname, const int prefix_dir)
 
 	/* Get the name for the configuration file */
 	if (prefix_dir) {
+		/* CHECKME: would it be useful for at least MinGW to use "all slash"
+		            if the first slash is a unix slash? */
 		snprintf (buff, (size_t)COB_NORMAL_MAX,
 			  "%s%c%s", cob_config_dir, SLASH_CHAR, fname);
 		name = buff;
@@ -482,6 +493,8 @@ cb_load_words (void)
 	return ret;
 }
 
+/* set configuration entry 'buff' with 'fname' and 'line' used
+   for error output */
 int
 cb_config_entry (char *buff, const char *fname, const int line)
 {
@@ -583,7 +596,11 @@ cb_config_entry (char *buff, const char *fname, const int line)
 			/* Include another conf file */
 			s = cob_expand_env_string ((char *)val);
 			cobc_main_free ((void *) val);
-			strncpy (buff, s, COB_SMALL_MAX);
+			if (strlen (s) < COB_SMALL_MAX) {
+				strcpy (buff, s);
+			} else {
+				/* otherwise leave unchanged -> likely better to raise a message */
+			}
 			/* special case: use cob_free (libcob) here as the memory
 			   was allocated in cob_expand_env_string -> libcob */
 			cob_free (s);
@@ -596,13 +613,11 @@ cb_config_entry (char *buff, const char *fname, const int line)
 			/* store translated to lower case */
 			cob_u8_t *p;
 			for (p = (cob_u8_t *)val; *p; p++) {
-				if (isupper (*p)) {
-					*p = (cob_u8_t)tolower (*p);
-				}
+				*p = cb_tolower (*p);
 			}
 			/* if explicit requested: disable */
 			if (strcmp (val, "default") == 0
-			    || strcmp (val, "off") == 0) {
+			 || strcmp (val, "off") == 0) {
 				*((const char **)var) = NULL;
 			} else {
 				*((const char **)var) = val;
@@ -770,6 +785,14 @@ cb_config_entry (char *buff, const char *fname, const int line)
 		/* LCOV_EXCL_STOP */
 
 	case CB_INT:
+		if (strcmp (val, "ignore") == 0)
+			break;
+		if (val[1] == 0
+		 && (islower(val[0]) || isupper(val[0]))) {
+			int v = val[0];
+			sprintf(valx,"%d",v);
+			val = valx;
+		}
 		for (j = 0; val[j]; j++) {
 			if (val[j] < '0' || val[j] > '9') {
 				invalid_value (fname, line, name, val, NULL, 0, 0);
