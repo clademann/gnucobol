@@ -279,7 +279,6 @@ typedef struct __cob_settings {
 	unsigned int	cob_exit_wait;		/* wait on program exit if no ACCEPT came after last DISPLAY */
 	const char		*cob_exit_msg;		/* message for cob_exit_wait */
 
-
 	/* reportio.c */
 	unsigned int 	cob_col_just_lrc;	/* Justify data in column LEFT/RIGHT/CENTER */
 
@@ -479,5 +478,6 @@ cob_max_int (const int x, const int y)
 	return y;
 }
 
+#include	<libcob/screenio-common.h>	// Definitions
 
 #endif	/* COB_LOCAL_H */
